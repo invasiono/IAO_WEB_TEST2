@@ -4,9 +4,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const stepDashboard = document.getElementById('stepDashboard');
   const tabLogin = document.getElementById('tabLogin');
   const tabRegister = document.getElementById('tabRegister');
+  const tabRecover = document.getElementById('tabRecover');
   const formTitle = document.getElementById('formTitle');
   const formSubtitle = document.getElementById('formSubtitle');
   const groupFullname = document.getElementById('groupFullname');
+  const groupEmail = document.getElementById('groupEmail');
   const inputFullname = document.getElementById('inputFullname');
   const inputEmail = document.getElementById('inputEmail');
   const emailTip = document.getElementById('emailTip');
@@ -15,6 +17,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const toggleQuestion = document.getElementById('toggleQuestion');
   const formSendOtp = document.getElementById('formSendOtp');
   const btnSendOtp = document.getElementById('btnSendOtp');
+  const btnDevLogin = document.getElementById('btnDevLogin');
+  const passkeySeparator = document.getElementById('passkeySeparator');
   const spinnerSend = document.getElementById('spinnerSend');
   const emailAlert = document.getElementById('emailAlert');
   const btnPasskeyLogin = document.getElementById('btnPasskeyLogin');
@@ -33,6 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnVerifyOtp = document.getElementById('btnVerifyOtp');
   const spinnerVerify = document.getElementById('spinnerVerify');
   const otpAlert = document.getElementById('otpAlert');
+  const otpInstructions = document.getElementById('otpInstructions');
   const timerCounter = document.getElementById('timerCounter');
   const btnResendOtp = document.getElementById('btnResendOtp');
   const resendCooldown = document.getElementById('resendCooldown');
@@ -49,103 +54,88 @@ document.addEventListener('DOMContentLoaded', () => {
   const usersList = document.getElementById('usersList');
   const countUsers = document.getElementById('countUsers');
   const btnRefreshUsers = document.getElementById('btnRefreshUsers');
-  const btnConfigModal = document.getElementById('btnConfigModal');
-  const modalConfig = document.getElementById('modalConfig');
-  const btnCloseModal = document.getElementById('btnCloseModal');
-  const btnCloseModalTriggers = document.querySelectorAll('.btn-close-modal-trigger');
-  const statusDot = document.getElementById('statusDot');
-  const configBtnText = document.getElementById('configBtnText');
   const navProviderBadge = document.getElementById('navProviderBadge');
-  const openWebmailText = document.getElementById('openWebmailText');
-  const btnOpenWebmail = document.getElementById('btnOpenWebmail');
-  const tabProviderGmail = document.getElementById('tabProviderGmail');
-  const tabProviderMailtrap = document.getElementById('tabProviderMailtrap');
-  const panelGmail = document.getElementById('panelGmail');
-  const panelMailtrap = document.getElementById('panelMailtrap');
-  const formConfigGmail = document.getElementById('formConfigGmail');
-  const cfgGmailUser = document.getElementById('cfgGmailUser');
-  const ai_cho_soi_ma_soiGmailPasswordInput = document.getElementById('cfgGmailPassword');
-  const btnSaveGmail = document.getElementById('btnSaveGmail');
-  const spinnerGmail = document.getElementById('spinnerGmail');
-  const modalAlertGmail = document.getElementById('modalAlertGmail');
-  const formConfigMailtrap = document.getElementById('formConfigMailtrap');
-  const cfgMailtrapHost = document.getElementById('cfgMailtrapHost');
-  const cfgMailtrapPort = document.getElementById('cfgMailtrapPort');
-  const cfgMailtrapUser = document.getElementById('cfgMailtrapUser');
-  const ai_cho_soi_ma_soiMailtrapPasswordInput = document.getElementById('cfgMailtrapPass');
-  const btnSaveMailtrap = document.getElementById('btnSaveMailtrap');
-  const spinnerMailtrap = document.getElementById('spinnerMailtrap');
-  const modalAlertMailtrap = document.getElementById('modalAlertMailtrap');
+  const savedAccountsSection = document.getElementById('savedAccountsSection');
+  const appVersion = document.getElementById('appVersion');
   let currentMode = 'login';
   let currentProvider = 'gmail';
+  let devLoginEnabled = false;
+  let currentOtpIsDev = false;
   let currentEmail = '';
   let currentFullname = '';
   let expiryInterval = null;
   let cooldownInterval = null;
+  setMode('login');
   checkSession();
   checkConfigStatus();
   function setMode(mode) {
     currentMode = mode;
     hideAlert(emailAlert);
     hideAlert(passkeyLoginAlert);
+    [tabLogin, tabRegister, tabRecover].forEach(tab => tab.classList.remove('active'));
+    tabLogin.classList.toggle('active', mode === 'login');
+    tabRegister.classList.toggle('active', mode === 'register');
+    tabRecover.classList.toggle('active', mode === 'recover');
 
-    if (mode === 'register') {
+    if (mode === 'login') {
+      btnSendOtp.classList.add('hidden');
+      btnDevLogin.classList.add('hidden');
+      passkeySeparator.classList.add('hidden');
+      btnPasskeyLogin.classList.remove('hidden');
+      groupFullname.classList.add('hidden');
+      groupEmail.classList.add('hidden');
+      inputFullname.required = false;
+      formTitle.textContent = 'Đăng nhập bằng Passkey';
+      formSubtitle.textContent = 'Dùng passkey đã đăng ký trên thiết bị hoặc trình quản lý mật khẩu của bạn.';
+      emailTip.textContent = 'Đăng nhập chỉ hoàn tất sau khi máy chủ xác minh chữ ký passkey và Origin.';
+      toggleQuestion.textContent = 'Chưa có tài khoản?';
+      btnToggleMode.textContent = 'Tạo tài khoản mới';
+    } else if (mode === 'register') {
+      btnSendOtp.classList.remove('hidden');
+      btnDevLogin.classList.toggle('hidden', !devLoginEnabled);
+      passkeySeparator.classList.add('hidden');
       btnPasskeyLogin.classList.add('hidden');
-      tabRegister.classList.add('active');
-      tabLogin.classList.remove('active');
       groupFullname.classList.remove('hidden');
+      groupEmail.classList.remove('hidden');
       inputFullname.required = true;
       formTitle.textContent = 'Tạo tài khoản mới';
-      formSubtitle.textContent = 'Đăng ký tài khoản và nhận mã OTP xác thực email gửi qua ' + (currentProvider === 'gmail' ? 'Gmail' : 'Mailtrap');
-      btnSendText.textContent = 'Đăng ký & Gửi OTP';
-      emailTip.textContent = '🔍 Hệ thống kiểm tra tên miền và máy chủ nhận thư (DNS MX) thực tế. Email đã tạo rồi sẽ không thể đăng ký lại.';
+      formSubtitle.textContent = 'Xác minh quyền truy cập email, sau đó tạo passkey để hoàn tất đăng ký.';
+      btnSendText.textContent = 'Xác minh email';
+      emailTip.textContent = 'OTP chỉ xác minh email. Nó không đăng nhập; chỉ passkey gắn với tên miền thật mới có thể hoàn tất.';
       toggleQuestion.textContent = 'Đã có tài khoản?';
-      btnToggleMode.textContent = 'Đăng nhập ngay';
+      btnToggleMode.textContent = 'Đăng nhập bằng Passkey';
     } else {
-      btnPasskeyLogin.classList.remove('hidden');
-      tabLogin.classList.add('active');
-      tabRegister.classList.remove('active');
+      btnSendOtp.classList.remove('hidden');
+      btnDevLogin.classList.toggle('hidden', !devLoginEnabled);
+      passkeySeparator.classList.add('hidden');
+      btnPasskeyLogin.classList.add('hidden');
       groupFullname.classList.add('hidden');
+      groupEmail.classList.remove('hidden');
       inputFullname.required = false;
-      formTitle.textContent = 'Đăng nhập bằng OTP';
-      formSubtitle.textContent = 'Nhập email tài khoản đã có để nhận mã OTP gửi qua ' + (currentProvider === 'gmail' ? 'Gmail' : 'Mailtrap');
-      btnSendText.textContent = 'Gửi mã OTP đăng nhập';
-      emailTip.textContent = '🔍 Nhập đúng email thật đã đăng ký để nhận mã OTP an toàn.';
-      toggleQuestion.textContent = 'Chưa có tài khoản?';
-      btnToggleMode.textContent = 'Tạo tài khoản mới ngay';
+      formTitle.textContent = 'Khôi phục quyền truy cập';
+      formSubtitle.textContent = 'Xác minh email rồi đăng ký passkey mới trên tên miền thật.';
+      btnSendText.textContent = 'Xác minh email để khôi phục';
+      emailTip.textContent = 'OTP không đăng nhập tài khoản. Một passkey mới phải được xác minh trên đúng tên miền.';
+      toggleQuestion.textContent = 'Quay lại đăng nhập?';
+      btnToggleMode.textContent = 'Đăng nhập bằng Passkey';
     }
   }
 
   tabLogin.addEventListener('click', () => setMode('login'));
   tabRegister.addEventListener('click', () => setMode('register'));
+  tabRecover.addEventListener('click', () => setMode('recover'));
   btnToggleMode.addEventListener('click', () => {
     setMode(currentMode === 'login' ? 'register' : 'login');
   });
-  function setModalProvider(provider) {
-    if (provider === 'gmail') {
-      tabProviderGmail.classList.add('active');
-      tabProviderMailtrap.classList.remove('active');
-      panelGmail.classList.add('active');
-      panelMailtrap.classList.remove('active');
-    } else {
-      tabProviderMailtrap.classList.add('active');
-      tabProviderGmail.classList.remove('active');
-      panelMailtrap.classList.add('active');
-      panelGmail.classList.remove('active');
-    }
-  }
-
-  tabProviderGmail.addEventListener('click', () => setModalProvider('gmail'));
-  tabProviderMailtrap.addEventListener('click', () => setModalProvider('mailtrap'));
 
   async function checkSession() {
     try {
       const res = await fetch('/api/me');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.authenticated && data.user) {
-          showDashboard(data.user, 'Đăng nhập thành công!');
-        }
+      const data = await res.json();
+      if (data.authenticated && data.user) {
+        showDashboard(data.user, 'Đăng nhập bằng passkey thành công!');
+      } else if (data.pending_passkey && data.user) {
+        showDashboard(data.user, 'Hoàn tất bằng passkey', 'Email đã xác minh, nhưng bạn chưa đăng nhập.', true);
       }
     } catch (e) {
       console.log('Session check error:', e);
@@ -157,35 +147,22 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch('/api/config');
       const data = await res.json();
       currentProvider = data.provider || 'gmail';
-
-      if (data.is_configured) {
-        statusDot.classList.add('connected');
-        if (currentProvider === 'gmail') {
-          configBtnText.textContent = `Gmail: ${data.gmail_user_masked || 'Đã kết nối'}`;
-          navProviderBadge.textContent = 'Gmail SMTP (Gửi mail thật)';
-          openWebmailText.textContent = 'Mở Gmail';
-          btnOpenWebmail.onclick = () => window.open('https://mail.google.com', '_blank');
-          linkOpenMailbox.href = 'https://mail.google.com';
-          linkOpenMailbox.textContent = 'Mở Gmail kiểm tra thư ↗';
-        } else {
-          configBtnText.textContent = `Mailtrap: ${data.mailtrap_user_masked || 'Đã kết nối'}`;
-          navProviderBadge.textContent = 'Mailtrap Sandbox';
-          openWebmailText.textContent = 'Mở Mailtrap';
-          btnOpenWebmail.onclick = () => window.open('https://mailtrap.io/sandboxes', '_blank');
-          linkOpenMailbox.href = 'https://mailtrap.io/sandboxes';
-          linkOpenMailbox.textContent = 'Mở Mailtrap Sandbox ↗';
-        }
-      } else {
-        statusDot.classList.remove('connected');
-        configBtnText.textContent = `Chưa cài đặt ${currentProvider === 'gmail' ? 'Gmail' : 'Mailtrap'}`;
+      devLoginEnabled = data.dev_login_enabled === true;
+      if (appVersion && data.app_version) {
+        appVersion.textContent = `v${data.app_version}`;
       }
-
-      if (data.gmail_user) cfgGmailUser.value = data.gmail_user;
-      if (data.mailtrap_user) cfgMailtrapUser.value = data.mailtrap_user;
-      if (data.mailtrap_host) cfgMailtrapHost.value = data.mailtrap_host;
-      if (data.mailtrap_port) cfgMailtrapPort.value = data.mailtrap_port;
-
-      setModalProvider(currentProvider);
+      setMode(currentMode);
+      const providerLabel = currentProvider === 'gmail' ? 'Gmail' : 'Mailtrap';
+      navProviderBadge.textContent = data.is_configured
+        ? `${providerLabel} email verification`
+        : 'Email verification unavailable';
+      if (currentProvider === 'gmail') {
+        linkOpenMailbox.href = 'https://mail.google.com';
+        linkOpenMailbox.textContent = 'Mở Gmail kiểm tra thư ↗';
+      } else {
+        linkOpenMailbox.href = 'https://mailtrap.io/inboxes';
+        linkOpenMailbox.textContent = 'Mở Mailtrap kiểm tra thư ↗';
+      }
     } catch (e) {
       console.error('Config status error:', e);
     }
@@ -332,11 +309,11 @@ document.addEventListener('DOMContentLoaded', () => {
         publicKey: preparePasskeyOptions(options)
       });
       if (!attestation) throw new Error('Passkey registration was cancelled.');
-      await postPasskey('/api/passkeys/register/verify', formPasskeyRegistration, {
+      const result = await postPasskey('/api/passkeys/register/verify', formPasskeyRegistration, {
         ceremony_id,
         credential: serializePasskeyCredential(attestation)
       });
-      showAlert(passkeyRegistrationAlert, 'Passkey registered successfully on this device.', 'success');
+      showDashboard(result.user, 'Passkey đã sẵn sàng', 'Xác thực bằng passkey đã hoàn tất.');
     } catch (error) {
       showAlert(passkeyRegistrationAlert, error.name === 'NotAllowedError'
         ? 'Passkey registration was cancelled or timed out.'
@@ -351,6 +328,10 @@ document.addEventListener('DOMContentLoaded', () => {
       await submitPasskeyLogin();
       return;
     }
+    await requestOtp(e.submitter === btnDevLogin);
+  });
+
+  async function requestOtp(useDevOtp) {
     hideAlert(emailAlert);
 
     const email = inputEmail.value.trim().toLowerCase();
@@ -367,14 +348,19 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    setLoading(btnSendOtp, spinnerSend, true);
+    if (useDevOtp) {
+      btnDevLogin.disabled = true;
+      btnDevLogin.textContent = 'Đang tạo OTP thử nghiệm...';
+    } else {
+      setLoading(btnSendOtp, spinnerSend, true);
+    }
 
     try {
       const formData = new FormData(formSendOtp);
       formData.set('email', email);
       formData.set('action', currentMode);
       formData.set('fullname', fullname);
-      const res = await fetch('/api/send-otp', {
+      const res = await fetch(useDevOtp ? '/api/dev/send-otp' : '/api/send-otp', {
         method: 'POST',
         body: formData
       });
@@ -384,17 +370,26 @@ document.addEventListener('DOMContentLoaded', () => {
       if (res.ok && data.success) {
         currentEmail = email;
         currentFullname = fullname;
+        currentOtpIsDev = useDevOtp;
         displayEmail.textContent = email;
 
-        if (currentMode === 'register') {
-          otpActionBadge.textContent = '✨ Đang xác thực: Tạo tài khoản mới';
-        } else {
-          otpActionBadge.textContent = '🔐 Đang xác thực: Đăng nhập';
-        }
+        otpActionBadge.textContent = currentMode === 'register'
+          ? '✨ Xác minh email để tạo tài khoản'
+          : '🔐 Xác minh email để đăng ký lại passkey';
 
         switchStep('otp');
         clearOtpInputs();
-        otpInputs[0].focus();
+        if (useDevOtp && data.otp) {
+          String(data.otp).split('').forEach((digit, index) => {
+            if (otpInputs[index]) otpInputs[index].value = digit;
+          });
+          otpInstructions.textContent = 'OTP thử nghiệm đã được tạo và điền sẵn; không email nào được gửi. Nhấn xác thực để tiếp tục.';
+          showAlert(otpAlert, data.message, 'success');
+          btnVerifyOtp.focus();
+        } else {
+          otpInstructions.textContent = '💡 Kiểm tra Hộp thư đến (hoặc mục Spam/Quảng cáo) → Copy mã dán thẳng vào ô';
+          otpInputs[0].focus();
+        }
         startExpiryTimer(data.expires_in || 300);
         startCooldownTimer(data.cooldown || 45);
       } else {
@@ -402,22 +397,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (data.already_exists) {
           setTimeout(() => setMode('login'), 2200);
-        } else if (data.not_found) {
-          setTimeout(() => setMode('register'), 2200);
-        } else if (data.needs_config) {
-          setTimeout(() => openConfigModal(), 700);
         }
       }
     } catch (err) {
       showAlert(emailAlert, 'Lỗi kết nối máy chủ! Hãy kiểm tra server có đang chạy không.');
     } finally {
-      setLoading(btnSendOtp, spinnerSend, false);
+      if (useDevOtp) {
+        btnDevLogin.disabled = false;
+        btnDevLogin.textContent = 'Dev login · không gửi email';
+      } else {
+        setLoading(btnSendOtp, spinnerSend, false);
+      }
     }
-  });
+  }
 
   btnChangeEmail.addEventListener('click', () => {
     clearInterval(expiryInterval);
     clearInterval(cooldownInterval);
+    currentOtpIsDev = false;
     switchStep('email');
     inputEmail.focus();
   });
@@ -508,8 +505,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (res.ok && data.success) {
         clearInterval(expiryInterval);
         clearInterval(cooldownInterval);
-        const title = data.action === 'register' ? 'Tạo tài khoản thành công!' : 'Đăng nhập thành công!';
-        showDashboard(data.user, title, data.message);
+        const title = data.action === 'register' ? 'Hoàn tất bằng passkey' : 'Đăng ký passkey mới';
+        showDashboard(data.user, title, data.message, true);
       } else {
         otpInputsContainer.classList.add('shake');
         setTimeout(() => otpInputsContainer.classList.remove('shake'), 500);
@@ -533,7 +530,7 @@ document.addEventListener('DOMContentLoaded', () => {
       formData.set('email', currentEmail);
       formData.set('action', currentMode);
       formData.set('fullname', currentFullname);
-      const res = await fetch('/api/send-otp', {
+      const res = await fetch(currentOtpIsDev ? '/api/dev/send-otp' : '/api/send-otp', {
         method: 'POST',
         body: formData
       });
@@ -542,8 +539,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (res.ok && data.success) {
         clearOtpInputs();
-        otpInputs[0].focus();
-        showAlert(otpAlert, 'Mã OTP mới đã được gửi vào hòm thư!', 'success');
+        if (currentOtpIsDev && data.otp) {
+          String(data.otp).split('').forEach((digit, index) => {
+            if (otpInputs[index]) otpInputs[index].value = digit;
+          });
+          showAlert(otpAlert, 'OTP thử nghiệm mới đã được điền sẵn; không email nào được gửi.', 'success');
+        } else {
+          otpInputs[0].focus();
+          showAlert(otpAlert, 'Mã OTP mới đã được gửi vào hòm thư!', 'success');
+        }
         startExpiryTimer(data.expires_in || 300);
         startCooldownTimer(data.cooldown || 45);
       } else {
@@ -597,19 +601,20 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }, 1000);
   }
-  function showDashboard(user, title = 'Đăng nhập thành công!', subtitle = '') {
+  function showDashboard(user, title = 'Đăng nhập bằng passkey thành công!', subtitle = '', pendingPasskey = false) {
     hideAlert(passkeyRegistrationAlert);
     dashGreetingTitle.textContent = title;
-    if (subtitle) {
-      dashGreetingSubtitle.textContent = subtitle;
-    }
+    dashGreetingSubtitle.textContent = subtitle || (pendingPasskey
+      ? 'Email đã xác minh, nhưng bạn chưa đăng nhập. Tạo passkey để tiếp tục.'
+      : 'Đã xác thực bằng passkey.');
     dashUserName.textContent = user.fullname || 'Người dùng';
     dashUserEmail.textContent = user.email || currentEmail;
     dashUserCreated.textContent = user.created_at || 'Mới tạo';
-    dashLoginTime.textContent = user.last_login || new Date().toLocaleTimeString();
+    dashLoginTime.textContent = pendingPasskey ? 'Chưa đăng nhập' : (user.last_login || new Date().toLocaleTimeString());
     avatarInitial.textContent = (user.fullname || user.email || 'U').charAt(0).toUpperCase();
-
-    loadUsersList();
+    savedAccountsSection.classList.toggle('hidden', pendingPasskey);
+    btnLogout.querySelector('span').textContent = pendingPasskey ? 'Hủy và quay lại đăng nhập' : 'Đăng xuất tài khoản';
+    if (!pendingPasskey) loadUsersList();
     switchStep('dashboard');
   }
 
@@ -678,102 +683,6 @@ document.addEventListener('DOMContentLoaded', () => {
     setMode('login');
     switchStep('email');
   });
-  function openConfigModal() {
-    hideAlert(modalAlertGmail);
-    hideAlert(modalAlertMailtrap);
-    modalConfig.classList.remove('hidden');
-  }
-
-  function closeConfigModal() {
-    modalConfig.classList.add('hidden');
-  }
-
-  btnConfigModal.addEventListener('click', openConfigModal);
-  btnCloseModal.addEventListener('click', closeConfigModal);
-  btnCloseModalTriggers.forEach(btn => btn.addEventListener('click', closeConfigModal));
-
-  modalConfig.addEventListener('click', (e) => {
-    if (e.target === modalConfig) closeConfigModal();
-  });
-  formConfigGmail.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    hideAlert(modalAlertGmail);
-
-    const ai_cho_soi_ma_soiConfigPayload = {
-      provider: 'gmail',
-      gmail_user: cfgGmailUser.value.trim(),
-      gmail_password: ai_cho_soi_ma_soiGmailPasswordInput.value.trim()
-    };
-
-    if (!ai_cho_soi_ma_soiConfigPayload.gmail_user || !ai_cho_soi_ma_soiConfigPayload.gmail_password) {
-      showAlert(modalAlertGmail, 'Vui lòng nhập Email Gmail và Mật khẩu ứng dụng 16 ký tự!');
-      return;
-    }
-
-    setLoading(btnSaveGmail, spinnerGmail, true);
-
-    try {
-      const res = await fetch('/api/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(ai_cho_soi_ma_soiConfigPayload)
-      });
-
-      const data = await res.json();
-      if (res.ok && data.success) {
-        showAlert(modalAlertGmail, data.message, 'success');
-        checkConfigStatus();
-        setTimeout(() => closeConfigModal(), 1200);
-      } else {
-        showAlert(modalAlertGmail, data.message || 'Lỗi khi lưu cấu hình Gmail.');
-      }
-    } catch (err) {
-      showAlert(modalAlertGmail, 'Lỗi kết nối khi lưu cấu hình!');
-    } finally {
-      setLoading(btnSaveGmail, spinnerGmail, false);
-    }
-  });
-  formConfigMailtrap.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    hideAlert(modalAlertMailtrap);
-
-    const ai_cho_soi_ma_soiConfigPayload = {
-      provider: 'mailtrap',
-      mailtrap_host: cfgMailtrapHost.value.trim(),
-      mailtrap_port: cfgMailtrapPort.value.trim(),
-      mailtrap_user: cfgMailtrapUser.value.trim(),
-      mailtrap_pass: ai_cho_soi_ma_soiMailtrapPasswordInput.value.trim()
-    };
-
-    if (!ai_cho_soi_ma_soiConfigPayload.mailtrap_user || !ai_cho_soi_ma_soiConfigPayload.mailtrap_pass) {
-      showAlert(modalAlertMailtrap, 'Vui lòng nhập Username và Password của Mailtrap!');
-      return;
-    }
-
-    setLoading(btnSaveMailtrap, spinnerMailtrap, true);
-
-    try {
-      const res = await fetch('/api/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(ai_cho_soi_ma_soiConfigPayload)
-      });
-
-      const data = await res.json();
-      if (res.ok && data.success) {
-        showAlert(modalAlertMailtrap, data.message, 'success');
-        checkConfigStatus();
-        setTimeout(() => closeConfigModal(), 1200);
-      } else {
-        showAlert(modalAlertMailtrap, data.message || 'Lỗi khi lưu cấu hình Mailtrap.');
-      }
-    } catch (err) {
-      showAlert(modalAlertMailtrap, 'Lỗi kết nối khi lưu cấu hình!');
-    } finally {
-      setLoading(btnSaveMailtrap, spinnerMailtrap, false);
-    }
-  });
-
   function setLoading(btn, spinner, isLoading) {
     if (isLoading) {
       btn.disabled = true;

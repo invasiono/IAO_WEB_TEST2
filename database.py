@@ -89,6 +89,38 @@ def create_user(email: str, fullname: str):
         except sqlite3.IntegrityError:
             return None
 
+def create_user_with_credential(email: str, fullname: str, credential_id: str,
+                                public_key: bytes, sign_count: int,
+                                transports: str, device_name: str):
+    email = email.strip().lower()
+    fullname = fullname.strip()
+    now_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+
+    with get_connection() as conn:
+        try:
+            cursor = conn.execute(
+                "INSERT INTO users (fullname, email, created_at, last_login) VALUES (?, ?, ?, ?)",
+                (fullname, email, now_str, now_str)
+            )
+            user_id = cursor.lastrowid
+            conn.execute(
+                """INSERT INTO webauthn_credentials
+                   (credential_id, user_id, public_key, sign_count, transports, device_name, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (credential_id, user_id, public_key, sign_count, transports, device_name, now_str)
+            )
+            conn.commit()
+            return {
+                "id": user_id,
+                "fullname": fullname,
+                "email": email,
+                "created_at": now_str,
+                "last_login": now_str
+            }
+        except sqlite3.IntegrityError:
+            conn.rollback()
+            return None
+
 def update_last_login(email: str):
     email = email.strip().lower()
     now_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")

@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import secrets
+import ipaddress
 import re
 import json
 import sqlite3
@@ -9,7 +10,8 @@ from urllib.parse import urlparse
 from datetime import datetime
 from pathlib import Path
 from flask import Flask, request, jsonify, render_template, session
-from dotenv import load_dotenv, set_key
+from dotenv import load_dotenv
+from email_validator import EmailNotValidError, validate_email
 from webauthn import (
     generate_authentication_options,
     generate_registration_options,
@@ -35,7 +37,7 @@ from database import (
     get_credentials_for_user,
     get_user_by_email,
     get_user_by_id,
-    create_user,
+    create_user_with_credential,
     update_credential_sign_count,
     update_last_login,
     get_all_users,
@@ -67,6 +69,7 @@ if os.getenv("WEBAUTHN_ORIGIN", "").strip().lower().startswith("https://") and (
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = configured_secret or secrets.token_urlsafe(48)
+app.config["APP_VERSION"] = os.getenv("APP_VERSION", "1.0.0").strip() or "1.0.0"
 app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
@@ -171,103 +174,53 @@ def is_provider_ready():
         return bool(cfg["mailtrap_user"] and cfg["mailtrap_user"] != "your_mailtrap_username_here" and
                     cfg["ai_cho_soi_ma_soi_mailtrap_password"] and cfg["ai_cho_soi_ma_soi_mailtrap_password"] != "your_mailtrap_password_here")
 
+def is_dev_login_enabled():
+    if os.getenv("DEV_LOGIN_ENABLED", "").strip().lower() != "true":
+        return False
+    try:
+        if not ipaddress.ip_address(request.remote_addr or "").is_loopback:
+            return False
+    except ValueError:
+        return False
+    try:
+        _, origin = get_webauthn_config()
+        parsed_origin = urlparse(origin)
+    except ValueError:
+        return False
+    return parsed_origin.scheme == "http" and parsed_origin.hostname in {
+        "localhost",
+        "127.0.0.1",
+        "::1",
+    }
+
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", app_version=app.config["APP_VERSION"])
 
 @app.route("/api/config", methods=["GET"])
 def get_config_status():
     cfg = get_smtp_config()
     ready = is_provider_ready()
-
-    masked_gmail = ""
-    if cfg["gmail_user"] and "@" in cfg["gmail_user"]:
-        parts = cfg["gmail_user"].split("@")
-        user_part = parts[0]
-        domain = parts[1]
-        masked_user = user_part[:2] + "***" if len(user_part) > 2 else "***"
-        masked_gmail = f"{masked_user}@{domain}"
-
-    masked_mailtrap = ""
-    if cfg["mailtrap_user"] and len(cfg["mailtrap_user"]) > 4:
-        masked_mailtrap = cfg["mailtrap_user"][:3] + "***" + cfg["mailtrap_user"][-2:]
-
     return jsonify({
         "provider": cfg["provider"],
         "is_configured": ready,
-        "gmail_user": cfg["gmail_user"] if cfg["gmail_user"] != "your_email@gmail.com" else "",
-        "gmail_user_masked": masked_gmail,
-        "mailtrap_user": cfg["mailtrap_user"] if cfg["mailtrap_user"] != "your_mailtrap_username_here" else "",
-        "mailtrap_user_masked": masked_mailtrap,
-        "mailtrap_host": cfg["mailtrap_host"],
-        "mailtrap_port": cfg["mailtrap_port"]
+        "dev_login_enabled": is_dev_login_enabled(),
+        "app_version": app.config["APP_VERSION"],
     })
-
-@app.route("/api/config", methods=["POST"])
-def update_config():
-    submitted_config = request.get_json() or {}
-    provider = submitted_config.get("provider", "gmail").strip().lower()
-
-    os.environ["SMTP_PROVIDER"] = provider
-    try:
-        set_key(str(env_path), "SMTP_PROVIDER", provider)
-    except Exception:
-        pass
-
-    if provider == "gmail":
-        gmail_user = submitted_config.get("gmail_user", "").strip()
-        ai_cho_soi_ma_soi_gmail_password = submitted_config.get("gmail_password", "").strip()
-
-        if not gmail_user or not ai_cho_soi_ma_soi_gmail_password:
-            return jsonify({"success": False, "message": "Vui lòng nhập đầy đủ Email Gmail và Mật khẩu ứng dụng (App Password)!"}), 400
-
-        os.environ["GMAIL_USER"] = gmail_user
-        os.environ["GMAIL_APP_PASSWORD"] = ai_cho_soi_ma_soi_gmail_password
-
-        try:
-            set_key(str(env_path), "GMAIL_USER", gmail_user)
-            set_key(str(env_path), "GMAIL_APP_PASSWORD", ai_cho_soi_ma_soi_gmail_password)
-        except Exception as e:
-            print("Không thể ghi file .env:", e)
-
-        return jsonify({
-            "success": True,
-            "message": f"Đã lưu cấu hình Gmail ({gmail_user}) thành công! OTP sẽ được gửi thật qua Gmail."
-        })
-    else:
-        mailtrap_user = submitted_config.get("mailtrap_user", "").strip()
-        ai_cho_soi_ma_soi_mailtrap_password = submitted_config.get("mailtrap_pass", "").strip()
-        host = submitted_config.get("mailtrap_host", "sandbox.smtp.mailtrap.io").strip()
-        port = str(submitted_config.get("mailtrap_port", "2525")).strip()
-
-        if not mailtrap_user or not ai_cho_soi_ma_soi_mailtrap_password:
-            return jsonify({"success": False, "message": "Vui lòng nhập đầy đủ Username và Password của Mailtrap!"}), 400
-
-        os.environ["MAILTRAP_USERNAME"] = mailtrap_user
-        os.environ["MAILTRAP_PASSWORD"] = ai_cho_soi_ma_soi_mailtrap_password
-        os.environ["MAILTRAP_HOST"] = host
-        os.environ["MAILTRAP_PORT"] = port
-
-        try:
-            set_key(str(env_path), "MAILTRAP_USERNAME", mailtrap_user)
-            set_key(str(env_path), "MAILTRAP_PASSWORD", ai_cho_soi_ma_soi_mailtrap_password)
-            set_key(str(env_path), "MAILTRAP_HOST", host)
-            set_key(str(env_path), "MAILTRAP_PORT", port)
-        except Exception as e:
-            print("Không thể ghi file .env:", e)
-
-        return jsonify({
-            "success": True,
-            "message": "Đã lưu cấu hình Mailtrap thành công!"
-        })
 
 @app.route("/api/send-otp", methods=["POST"])
 def send_otp():
     if request.mimetype not in {"multipart/form-data", "application/x-www-form-urlencoded"}:
         return jsonify({"success": False, "message": "Expected form data."}), 400
     email_raw = request.form.get("email", "").strip().lower()
-    action = request.form.get("action", "login").strip().lower()
+    action = request.form.get("action", "").strip().lower()
     fullname = request.form.get("fullname", "").strip()
+
+    if action not in {"register", "recover"}:
+        return jsonify({
+            "success": False,
+            "message": "Đăng nhập bằng OTP đã bị tắt. Hãy dùng passkey."
+        }), 400
 
     if not email_raw:
         return jsonify({"success": False, "message": "Vui lòng nhập địa chỉ email!"}), 400
@@ -287,19 +240,18 @@ def send_otp():
     if action == "register":
         if not fullname:
             return jsonify({"success": False, "message": "Vui lòng nhập đầy đủ Họ và tên để tạo tài khoản!"}), 400
-
         if existing_user:
             return jsonify({
                 "success": False,
                 "already_exists": True,
                 "message": f"Tài khoản với email '{email}' đã tồn tại trong hệ thống! Những tài khoản đã tạo rồi thì không thể tạo lại. Vui lòng chuyển qua tab Đăng nhập."
             }), 400
-    else:
+    elif action == "recover":
         if not existing_user:
             return jsonify({
                 "success": False,
                 "not_found": True,
-                "message": f"Tài khoản '{email}' chưa tồn tại! Vui lòng chuyển qua tab 'Đăng ký tài khoản' để tạo mới."
+                "message": "Không tìm thấy tài khoản với email này."
             }), 400
         fullname = existing_user.get("fullname", "")
 
@@ -323,7 +275,7 @@ def send_otp():
             "success": False,
             "needs_config": True,
             "provider": cfg["provider"],
-            "message": f"Chưa cấu hình tài khoản {prov_name}! Vui lòng bấm vào nút 'Cấu hình Email' để điền thông tin gửi mail."
+            "message": f"Máy chủ chưa cấu hình tài khoản {prov_name}. Vui lòng liên hệ quản trị viên."
         }), 400
 
     otp_code = str(secrets.randbelow(900000) + 100000)
@@ -358,7 +310,7 @@ def send_otp():
         "last_sent": now
     }
 
-    action_label = "tạo tài khoản" if action == "register" else "đăng nhập"
+    action_label = "tạo tài khoản" if action == "register" else "khôi phục passkey"
     dest_desc = "hòm thư Gmail" if cfg["provider"] == "gmail" else "Mailtrap Sandbox"
     return jsonify({
         "success": True,
@@ -368,6 +320,66 @@ def send_otp():
         "expires_in": OTP_EXPIRY_SECONDS,
         "cooldown": RESEND_COOLDOWN_SECONDS
     })
+
+@app.route("/api/dev/send-otp", methods=["POST"])
+def send_dev_otp():
+    if not is_dev_login_enabled():
+        return jsonify({"success": False, "message": "Dev OTP is unavailable."}), 404
+    if request.mimetype not in {"multipart/form-data", "application/x-www-form-urlencoded"}:
+        return jsonify({"success": False, "message": "Expected form data."}), 400
+
+    email_raw = request.form.get("email", "").strip().lower()
+    action = request.form.get("action", "").strip().lower()
+    fullname = request.form.get("fullname", "").strip()
+    if action not in {"register", "recover"}:
+        return jsonify({"success": False, "message": "Dev OTP only supports registration or passkey recovery."}), 400
+    if not email_raw:
+        return jsonify({"success": False, "message": "Enter an email address."}), 400
+    try:
+        email = validate_email(email_raw, check_deliverability=False).normalized
+    except EmailNotValidError:
+        return jsonify({"success": False, "message": "Enter a valid email address."}), 400
+
+    existing_user = get_user_by_email(email)
+    if action == "register":
+        if not fullname:
+            return jsonify({"success": False, "message": "Enter a name to create an account."}), 400
+        if existing_user:
+            return jsonify({"success": False, "already_exists": True, "message": "This email already has an account."}), 400
+    else:
+        if not existing_user:
+            return jsonify({"success": False, "not_found": True, "message": "No account was found for this email."}), 400
+        fullname = existing_user["fullname"]
+
+    now = time.time()
+    existing_otp = otp_storage.get(email)
+    if existing_otp and now - existing_otp.get("last_sent", 0) < RESEND_COOLDOWN_SECONDS:
+        wait_time = int(RESEND_COOLDOWN_SECONDS - (now - existing_otp.get("last_sent", 0)))
+        return jsonify({
+            "success": False,
+            "message": f"Wait {wait_time}s before requesting another OTP.",
+            "cooldown": wait_time,
+        }), 429
+
+    otp_code = str(secrets.randbelow(900000) + 100000)
+    otp_storage[email] = {
+        "otp": otp_code,
+        "action": action,
+        "fullname": fullname,
+        "expires_at": now + OTP_EXPIRY_SECONDS,
+        "attempts": 0,
+        "last_sent": now,
+    }
+    response = jsonify({
+        "success": True,
+        "action": action,
+        "message": "Local development OTP generated; no email was sent.",
+        "otp": otp_code,
+        "expires_in": OTP_EXPIRY_SECONDS,
+        "cooldown": RESEND_COOLDOWN_SECONDS,
+    })
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 @app.route("/api/verify-otp", methods=["POST"])
 def verify_otp():
@@ -411,36 +423,45 @@ def verify_otp():
             "remaining_attempts": remaining
         }), 400
 
-    action = record.get("action", "login")
+    action = record.get("action", "")
     fullname = record.get("fullname", "")
 
     del otp_storage[email]
 
     if action == "register":
-        user = create_user(email, fullname)
-        if not user:
+        if get_user_by_email(email):
             return jsonify({
                 "success": False,
                 "message": "Tài khoản này đã tồn tại trong cơ sở dữ liệu, không thể tạo lại!"
             }), 400
-        success_msg = f"Chúc mừng {fullname}! Bạn đã tạo tài khoản thành công và được lưu vào hệ thống."
-    else:
-        update_last_login(email)
+        user = {
+            "id": None,
+            "fullname": fullname,
+            "email": email,
+            "created_at": "Chưa tạo",
+            "last_login": "Chưa đăng nhập",
+        }
+    elif action == "recover":
         user = get_user_by_email(email)
         if not user:
-            return jsonify({"success": False, "message": "Tài khoản không tồn tại!"}), 400
-        success_msg = f"Đăng nhập thành công! Chào mừng {user['fullname']} quay trở lại."
+            return jsonify({"success": False, "message": "Tài khoản không tồn tại."}), 400
+    else:
+        return jsonify({"success": False, "message": "Đăng nhập bằng OTP đã bị tắt. Hãy dùng passkey."}), 400
 
     session.clear()
-    session["user_email"] = user["email"]
-    session["user_fullname"] = user["fullname"]
-    session["logged_in_at"] = user["last_login"]
-    session["created_at"] = user["created_at"]
+    session["pending_passkey_expires_at"] = int(time.time()) + WEBAUTHN_CHALLENGE_TTL_SECONDS
+    if action == "register":
+        session["pending_passkey_email"] = user["email"]
+        session["pending_passkey_fullname"] = user["fullname"]
+        session["pending_passkey_user_handle"] = secrets.token_urlsafe(32)
+    else:
+        session["pending_passkey_user_id"] = user["id"]
 
     return jsonify({
         "success": True,
-        "message": success_msg,
+        "message": "Email đã được xác minh. Hoàn tất bằng cách tạo passkey; bạn chưa đăng nhập.",
         "action": action,
+        "pending_passkey": True,
         "user": user
     })
 
@@ -448,6 +469,30 @@ def verify_otp():
 def get_current_user():
     user_email = session.get("user_email")
     if not user_email:
+        pending_user_id = session.get("pending_passkey_user_id")
+        pending_expires_at = session.get("pending_passkey_expires_at", 0)
+        if pending_user_id and pending_expires_at > int(time.time()):
+            pending_user = get_user_by_id(pending_user_id)
+            if pending_user:
+                return jsonify({
+                    "authenticated": False,
+                    "pending_passkey": True,
+                    "user": pending_user
+                })
+        pending_email = session.get("pending_passkey_email")
+        pending_fullname = session.get("pending_passkey_fullname")
+        if pending_email and pending_fullname and pending_expires_at > int(time.time()):
+            return jsonify({
+                "authenticated": False,
+                "pending_passkey": True,
+                "user": {
+                    "email": pending_email,
+                    "fullname": pending_fullname,
+                    "created_at": "Chưa tạo",
+                    "last_login": "Chưa đăng nhập",
+                }
+            })
+        session.clear()
         return jsonify({"authenticated": False}), 401
 
     user = get_user_by_email(user_email)
@@ -488,15 +533,38 @@ def passkey_registration_options():
     rp_id, _ = config
 
     user = get_user_by_email(session.get("user_email", ""))
+    pending_passkey = False
+    pending_new_account = False
     if not user:
-        session.clear()
-        return jsonify({"success": False, "message": "Sign in before adding a passkey."}), 401
+        pending_user_id = session.get("pending_passkey_user_id")
+        pending_expires_at = session.get("pending_passkey_expires_at", 0)
+        if pending_user_id and pending_expires_at > int(time.time()):
+            user = get_user_by_id(pending_user_id)
+            pending_passkey = bool(user)
+        if not user and session.get("pending_passkey_email") and pending_expires_at > int(time.time()):
+            pending_email = session["pending_passkey_email"]
+            if get_user_by_email(pending_email):
+                session.clear()
+                return jsonify({"success": False, "message": "An account with this email already exists."}), 409
+            user = {
+                "id": None,
+                "email": pending_email,
+                "fullname": session.get("pending_passkey_fullname", ""),
+            }
+            pending_new_account = True
+        if not user:
+            session.clear()
+            return jsonify({"success": False, "message": "Verify your email before enrolling a passkey."}), 401
 
-    existing_credentials = get_credentials_for_user(user["id"])
+    existing_credentials = get_credentials_for_user(user["id"]) if user["id"] else []
+    webauthn_user_id = (
+        base64url_to_bytes(session["pending_passkey_user_handle"])
+        if pending_new_account else f"passkey-user:{user['id']}".encode("utf-8")
+    )
     options = generate_registration_options(
         rp_id=rp_id,
         rp_name="SecureOTP System",
-        user_id=f"passkey-user:{user['id']}".encode("utf-8"),
+        user_id=webauthn_user_id,
         user_name=user["email"],
         user_display_name=user["fullname"],
         authenticator_selection=AuthenticatorSelectionCriteria(
@@ -509,13 +577,21 @@ def passkey_registration_options():
         ],
     )
     ceremony_id = secrets.token_urlsafe(32)
+    challenge_expires_at = int(time.time()) + WEBAUTHN_CHALLENGE_TTL_SECONDS
+    if pending_passkey or pending_new_account:
+        challenge_expires_at = min(
+            challenge_expires_at,
+            session["pending_passkey_expires_at"],
+        )
     create_webauthn_challenge(
         ceremony_id,
         "registration",
         bytes_to_base64url(options.challenge),
-        user["id"],
-        int(datetime.now().timestamp()) + WEBAUTHN_CHALLENGE_TTL_SECONDS,
+        None if pending_new_account else user["id"],
+        challenge_expires_at,
     )
+    if pending_new_account:
+        session["pending_registration_ceremony_id"] = ceremony_id
     return jsonify({
         "success": True,
         "ceremony_id": ceremony_id,
@@ -533,9 +609,28 @@ def verify_passkey_registration():
     rp_id, expected_origin = config
 
     user = get_user_by_email(session.get("user_email", ""))
+    pending_passkey = False
+    pending_new_account = False
     if not user:
-        session.clear()
-        return jsonify({"success": False, "message": "Sign in before adding a passkey."}), 401
+        pending_user_id = session.get("pending_passkey_user_id")
+        pending_expires_at = session.get("pending_passkey_expires_at", 0)
+        if pending_user_id and pending_expires_at > int(time.time()):
+            user = get_user_by_id(pending_user_id)
+            pending_passkey = bool(user)
+        if not user and session.get("pending_passkey_email") and pending_expires_at > int(time.time()):
+            pending_email = session["pending_passkey_email"]
+            if get_user_by_email(pending_email):
+                session.clear()
+                return jsonify({"success": False, "message": "An account with this email already exists."}), 409
+            user = {
+                "id": None,
+                "email": pending_email,
+                "fullname": session.get("pending_passkey_fullname", ""),
+            }
+            pending_new_account = True
+        if not user:
+            session.clear()
+            return jsonify({"success": False, "message": "Verify your email before enrolling a passkey."}), 401
 
     ceremony_id = form.get("ceremony_id")
     credential = parse_passkey_credential(form)
@@ -543,8 +638,11 @@ def verify_passkey_registration():
     if not isinstance(ceremony_id, str) or not credential or len(device_name) > 80:
         return jsonify({"success": False, "message": "Invalid passkey registration response."}), 400
 
+    if pending_new_account and ceremony_id != session.get("pending_registration_ceremony_id"):
+        return jsonify({"success": False, "message": "Registration challenge is invalid or expired."}), 400
     challenge_record = consume_webauthn_challenge(ceremony_id, "registration")
-    if not challenge_record or challenge_record["user_id"] != user["id"]:
+    expected_challenge_user_id = None if pending_new_account else user["id"]
+    if not challenge_record or challenge_record["user_id"] != expected_challenge_user_id:
         return jsonify({"success": False, "message": "Registration challenge is invalid, expired, or already used."}), 400
     try:
         verification = verify_registration_response(
@@ -564,19 +662,47 @@ def verify_passkey_registration():
             [item for item in transport_list if isinstance(item, str)]
             if isinstance(transport_list, list) else []
         )
-        save_credential(
-            bytes_to_base64url(verification.credential_id),
-            user["id"],
-            verification.credential_public_key,
-            verification.sign_count,
-            transports,
-            device_name or "Passkey",
-        )
+        credential_id = bytes_to_base64url(verification.credential_id)
+        if pending_new_account:
+            user = create_user_with_credential(
+                user["email"],
+                user["fullname"],
+                credential_id,
+                verification.credential_public_key,
+                verification.sign_count,
+                transports,
+                device_name or "Passkey",
+            )
+            if not user:
+                return jsonify({"success": False, "message": "Could not create this account."}), 409
+        else:
+            save_credential(
+                credential_id,
+                user["id"],
+                verification.credential_public_key,
+                verification.sign_count,
+                transports,
+                device_name or "Passkey",
+            )
     except sqlite3.IntegrityError:
         app.logger.exception("Could not store verified WebAuthn credential")
         return jsonify({"success": False, "message": "Could not store this passkey."}), 409
 
-    return jsonify({"success": True, "message": "Passkey registered."})
+    if pending_passkey or pending_new_account:
+        update_last_login(user["email"])
+        user = get_user_by_email(user["email"])
+        session.clear()
+        session["user_email"] = user["email"]
+        session["user_fullname"] = user["fullname"]
+        session["logged_in_at"] = user["last_login"]
+        session["created_at"] = user["created_at"]
+
+    return jsonify({
+        "success": True,
+        "authenticated": True,
+        "message": "Passkey registered.",
+        "user": user
+    })
 
 @app.route("/api/passkeys/authenticate/options", methods=["POST"])
 def passkey_authentication_options():

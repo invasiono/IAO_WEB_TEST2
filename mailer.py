@@ -26,10 +26,16 @@ def verify_email_real_existence(email: str) -> tuple[bool, str, str]:
             msg = f"Email không hợp lệ: {error_str}"
         return False, msg, email
 
-def render_email_html(otp_code: str, recipient_email: str, action: str = "login", fullname: str = "") -> str:
-    action_text = "Đăng Ký Tài Khoản Mới" if action == "register" else "Xác Thực Đăng Nhập"
+def render_email_html(otp_code: str, recipient_email: str, action: str = "verify", fullname: str = "") -> str:
+    action_text = {
+        "register": "Xác Minh Email Đăng Ký",
+        "recover": "Xác Minh Email Khôi Phục Passkey"
+    }.get(action, "Xác Minh Email")
     greeting_name = fullname if fullname else recipient_email
-    action_desc = "tạo tài khoản mới" if action == "register" else "đăng nhập vào tài khoản"
+    action_desc = {
+        "register": "xác minh email để tạo tài khoản",
+        "recover": "xác minh email để đăng ký passkey mới"
+    }.get(action, "xác minh email")
 
     return f"""<!DOCTYPE html>
 <html lang="vi">
@@ -132,7 +138,7 @@ def render_email_html(otp_code: str, recipient_email: str, action: str = "login"
   <div class="email-container">
     <div class="email-header">
       <h1>🔐 {action_text}</h1>
-      <p>Hệ thống mã xác thực bảo mật gửi qua Gmail</p>
+      <p>Hệ thống gửi email xác minh bảo mật</p>
     </div>
     <div class="email-body">
       <div class="greeting">
@@ -151,7 +157,7 @@ def render_email_html(otp_code: str, recipient_email: str, action: str = "login"
       </div>
     </div>
     <div class="email-footer">
-      Email được gửi tự động qua hệ thống máy chủ Gmail SMTP.<br>
+      Email được gửi tự động từ hệ thống xác minh tài khoản.<br>
       © 2026 SecureOTP System. All rights reserved.
     </div>
   </div>
@@ -169,13 +175,16 @@ def send_otp_via_smtp(
     mailtrap_port: int,
     mailtrap_user: str,
     ai_cho_soi_ma_soi_mailtrap_password: str,
-    action: str = "login",
+    action: str = "verify",
     fullname: str = ""
 ) -> tuple[bool, str]:
     """
     Gửi email OTP qua Gmail SMTP hoặc Mailtrap Sandbox
     """
-    action_label = "Đăng ký" if action == "register" else "Đăng nhập"
+    action_label = {
+        "register": "xác minh email đăng ký",
+        "recover": "xác minh email khôi phục passkey"
+    }.get(action, "xác minh email")
     msg = MIMEMultipart("alternative")
     msg["Subject"] = f"[{otp_code}] Mã xác thực OTP {action_label}"
     msg["To"] = recipient_email
@@ -188,7 +197,7 @@ def send_otp_via_smtp(
 
     if provider == "gmail":
         if not gmail_user or not ai_cho_soi_ma_soi_gmail_password or gmail_user == "your_email@gmail.com" or ai_cho_soi_ma_soi_gmail_password == "your_gmail_app_password":
-            return False, "Chưa cấu hình tài khoản Gmail! Vui lòng bấm vào 'Cấu hình Email' để nhập địa chỉ Gmail và Mật khẩu ứng dụng (App Password)."
+            return False, "Máy chủ chưa cấu hình Gmail SMTP. Hãy cấu hình thông tin gửi thư trong môi trường máy chủ."
 
         msg["From"] = f"SecureOTP Service <{gmail_user}>"
 
@@ -209,7 +218,7 @@ def send_otp_via_smtp(
 
     else:
         if not mailtrap_user or not ai_cho_soi_ma_soi_mailtrap_password or mailtrap_user == "your_mailtrap_username_here":
-            return False, "Chưa cấu hình tài khoản Mailtrap! Vui lòng bấm vào 'Cấu hình Email' để nhập Mailtrap Credentials."
+            return False, "Máy chủ chưa cấu hình Mailtrap SMTP. Hãy cấu hình thông tin gửi thư trong môi trường máy chủ."
 
         msg["From"] = f"SecureOTP Service <noreply@mailtrap-demo.com>"
 

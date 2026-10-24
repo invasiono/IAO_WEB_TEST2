@@ -111,6 +111,39 @@ body {
   letter-spacing: 0.5px;
 }
 
+.app-version {
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.app-version strong {
+  color: #ffffff;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.btn-dev {
+  width: 100%;
+  margin-top: 10px;
+  padding: 12px 16px;
+  border: 1px dashed #f59e0b;
+  border-radius: 12px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-dev:hover:not(:disabled) {
+  background: #fef3c7;
+}
+
+.btn-dev:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 .nav-actions {
   display: flex;
   align-items: center;
@@ -996,6 +1029,9 @@ body {
 @media (max-width: 520px) {
   .top-nav {
     padding: 14px 18px;
+  }
+  .app-version {
+    font-size: 10px;
   }
   .auth-card {
     padding: 24px 18px;

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Đăng Nhập & Đăng Ký Tài Khoản - Xác Thực OTP Gmail</title>
+  <title>Đăng nhập bằng Passkey</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
@@ -20,10 +20,11 @@
     <div class="logo-area">
       <div class="logo-icon">📧</div>
       <div class="logo-text">
-        <span class="logo-title">SecureOTP System</span>
-        <span class="logo-badge" id="navProviderBadge">Gmail SMTP & Real DNS Check</span>
+        <span class="logo-title">Secure Passkey</span>
+        <span class="logo-badge" id="navProviderBadge">Email verification</span>
       </div>
     </div>
+    <div class="app-version">Version <strong id="appVersion">v{{ app_version }}</strong></div>
   </header>
 
   <main class="main-container">
@@ -35,14 +36,15 @@
         <div class="auth-tabs">
           <button type="button" id="tabLogin" class="tab-btn active">Đăng Nhập</button>
           <button type="button" id="tabRegister" class="tab-btn">Tạo Tài Khoản Mới</button>
+          <button type="button" id="tabRecover" class="tab-btn">Khôi Phục Passkey</button>
         </div>
 
         <div class="card-header">
           <div class="icon-bubble" id="stepIcon">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
           </div>
-          <h2 id="formTitle">Đăng nhập bằng OTP</h2>
-          <p class="subtitle" id="formSubtitle">Nhập email tài khoản của bạn để nhận mã OTP gửi qua Gmail</p>
+          <h2 id="formTitle">Đăng nhập bằng Passkey</h2>
+          <p class="subtitle" id="formSubtitle">Dùng passkey đã đăng ký để đăng nhập.</p>
         </div>
 
         <form id="formSendOtp" class="auth-form" onsubmit="return false;">
@@ -56,22 +58,25 @@
           </div>
 
 
-          <div class="form-group">
-            <label for="inputEmail">Địa chỉ Email thực tế</label>
+          <div class="form-group" id="groupEmail">
+            <label for="inputEmail">Email</label>
             <div class="input-wrapper">
               <svg class="input-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
               <input type="email" id="inputEmail" name="email" placeholder="vd: yourname@gmail.com" required autocomplete="email">
             </div>
-            <span class="field-tip" id="emailTip">🔍 Hệ thống sẽ tự động xác thực tên miền và kiểm tra máy chủ nhận thư (DNS MX) thực tế trước khi gửi mã.</span>
+            <span class="field-tip" id="emailTip">Đăng nhập chỉ hoàn tất sau khi máy chủ xác minh chữ ký passkey và Origin.</span>
           </div>
 
           <div id="emailAlert" class="alert-box hidden"></div>
 
-          <button type="submit" id="btnSendOtp" class="btn-primary">
+          <button type="submit" id="btnSendOtp" class="btn-primary hidden">
             <span class="btn-text" id="btnSendText">Gửi mã OTP đăng nhập</span>
             <div class="spinner hidden" id="spinnerSend"></div>
           </button>
-          <div class="passkey-separator">hoặc</div>
+          <button type="submit" id="btnDevLogin" class="btn-dev hidden">
+            Dev login · không gửi email
+          </button>
+          <div class="passkey-separator hidden" id="passkeySeparator">hoặc</div>
           <div id="passkeyLoginAlert" class="alert-box hidden"></div>
           <button type="submit" id="btnPasskeyLogin" name="auth_method" value="passkey"
                   formnovalidate class="btn-secondary passkey-button">
@@ -87,7 +92,7 @@
         <div class="mailtrap-help-banner">
           <div class="help-icon">🛡️</div>
           <div class="help-text">
-            <strong>Bảo vệ & Xác thực thực tế:</strong> Tên miền giả mạo hoặc không thể nhận thư sẽ bị từ chối ngay lập tức. Mỗi email chỉ được đăng ký một tài khoản duy nhất.
+            <strong>Chống giả mạo miền:</strong> Chỉ passkey đã xác minh trên đúng tên miền mới có thể đăng nhập. Mã email không tạo phiên đăng nhập.
           </div>
         </div>
       </section>
@@ -124,7 +129,7 @@
               <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]*" class="otp-digit" data-index="4">
               <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]*" class="otp-digit" data-index="5">
             </div>
-            <p class="otp-paste-hint">💡 Kiểm tra Hộp thư đến (hoặc mục Spam/Quảng cáo) &rarr; Copy mã dán thẳng vào ô</p>
+            <p class="otp-paste-hint" id="otpInstructions">💡 Kiểm tra Hộp thư đến (hoặc mục Spam/Quảng cáo) &rarr; Copy mã dán thẳng vào ô</p>
           </div>
 
           <div class="timer-row">
@@ -180,7 +185,7 @@
 
         <div class="passkey-enrollment">
           <h4>Passkeys</h4>
-          <p>Thêm passkey để đăng nhập nhanh chóng và chống giả mạo miền bằng Origin Binding.</p>
+          <p>Đăng nhập chỉ được cấp sau khi xác minh passkey được ràng buộc với tên miền thật.</p>
           <div id="passkeyRegistrationAlert" class="alert-box hidden"></div>
           <form id="formPasskeyRegistration" class="passkey-form">
             <input type="hidden" name="action" value="register">
@@ -194,7 +199,7 @@
         </div>
 
 
-        <div class="saved-accounts-section">
+        <div class="saved-accounts-section" id="savedAccountsSection">
           <div class="section-title-row">
             <h4>📁 Tài khoản đã lưu trong hệ thống (<span id="countUsers">0</span>)</h4>
             <button type="button" id="btnRefreshUsers" class="btn-mini-refresh" title="Làm mới danh sách">↻ Cập nhật</button>
@@ -214,105 +219,6 @@
 
     </div>
   </main>
-
-
-  <div id="modalConfig" class="modal-overlay hidden">
-    <div class="modal-content">
-      <div class="modal-header">
-        <div class="modal-title">
-          <span class="gear-icon">⚙️</span>
-          <h3>Cấu hình Máy Chủ Gửi Email</h3>
-        </div>
-        <button type="button" id="btnCloseModal" class="btn-close">&times;</button>
-      </div>
-
-      <div class="modal-body">
-
-        <div class="provider-tabs">
-          <button type="button" id="tabProviderGmail" class="provider-tab-btn active">
-            📮 Gửi qua Gmail (Thực tế)
-          </button>
-          <button type="button" id="tabProviderMailtrap" class="provider-tab-btn">
-            🧪 Mailtrap (Sandbox thử nghiệm)
-          </button>
-        </div>
-
-
-        <div id="panelGmail" class="provider-panel active">
-          <div class="info-guide">
-            <strong>Cách thiết lập Gmail để gửi OTP thật:</strong>
-            <ol>
-              <li>Bật <strong>Xác minh 2 bước</strong> trong Google Account: <a href="https://myaccount.google.com/security" target="_blank">Google Security ↗</a></li>
-              <li>Truy cập link tạo mật khẩu ứng dụng: <a href="https://myaccount.google.com/apppasswords" target="_blank">Tạo App Password ↗</a></li>
-              <li>Đặt tên ứng dụng bất kỳ (ví dụ: <code>OTP Web</code>) rồi bấm <strong>Tạo</strong></li>
-              <li>Google sẽ cấp <strong>16 chữ cái</strong> (mật khẩu ứng dụng). Hãy dán vào ô bên dưới:</li>
-            </ol>
-          </div>
-
-          <form id="formConfigGmail" onsubmit="return false;">
-            <div class="form-group">
-              <label for="cfgGmailUser">Email Gmail gửi đi *</label>
-              <input type="email" id="cfgGmailUser" placeholder="vd: yourname@gmail.com" required autocomplete="email">
-            </div>
-            <div class="form-group">
-              <label for="cfgGmailPassword">Mật khẩu ứng dụng (App Password 16 ký tự) *</label>
-              <input type="password" id="cfgGmailPassword" placeholder="vd: abcd efgh ijkl mnop" required autocomplete="off">
-              <small class="field-hint">⚠️ Không phải mật khẩu đăng nhập Gmail thông thường. Bắt buộc dùng Mật khẩu ứng dụng 16 ký tự của Google.</small>
-            </div>
-
-            <div id="modalAlertGmail" class="alert-box hidden"></div>
-
-            <div class="modal-footer">
-              <button type="button" class="btn-cancel btn-close-modal-trigger">Đóng</button>
-              <button type="submit" id="btnSaveGmail" class="btn-primary">
-                <span class="btn-text">Lưu Cấu Hình Gmail</span>
-                <div class="spinner hidden" id="spinnerGmail"></div>
-              </button>
-            </div>
-          </form>
-        </div>
-
-
-        <div id="panelMailtrap" class="provider-panel">
-          <div class="info-guide">
-            <strong>Thông tin Mailtrap Sandboxes:</strong>
-            <p style="margin-top: 4px;">Xem tại <a href="https://mailtrap.io/sandboxes" target="_blank">mailtrap.io/sandboxes</a> &rarr; My Sandbox &rarr; Integration tab.</p>
-          </div>
-
-          <form id="formConfigMailtrap" onsubmit="return false;">
-            <div class="form-group">
-              <label for="cfgMailtrapHost">SMTP Host</label>
-              <input type="text" id="cfgMailtrapHost" value="sandbox.smtp.mailtrap.io" required>
-            </div>
-            <div class="form-group">
-              <label for="cfgMailtrapPort">SMTP Port</label>
-              <input type="number" id="cfgMailtrapPort" value="2525" required>
-            </div>
-            <div class="form-group">
-              <label for="cfgMailtrapUser">Mailtrap Username *</label>
-              <input type="text" id="cfgMailtrapUser" placeholder="vd: fca8efc18ad8cc" required autocomplete="off">
-            </div>
-            <div class="form-group">
-              <label for="cfgMailtrapPass">Mailtrap Password *</label>
-              <input type="password" id="cfgMailtrapPass" placeholder="Dán password Mailtrap vào đây" required autocomplete="off">
-            </div>
-
-            <div id="modalAlertMailtrap" class="alert-box hidden"></div>
-
-            <div class="modal-footer">
-              <button type="button" class="btn-cancel btn-close-modal-trigger">Đóng</button>
-              <button type="submit" id="btnSaveMailtrap" class="btn-primary">
-                <span class="btn-text">Lưu Cấu Hình Mailtrap</span>
-                <div class="spinner hidden" id="spinnerMailtrap"></div>
-              </button>
-            </div>
-          </form>
-        </div>
-
-      </div>
-    </div>
-  </div>
-
   <script src="/static/script.js"></script>
 </body>
 </html>

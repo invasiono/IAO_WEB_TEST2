@@ -29,10 +29,18 @@ def init_db():
                 public_key BLOB NOT NULL,
                 sign_count INTEGER NOT NULL DEFAULT 0,
                 transports TEXT NOT NULL DEFAULT '[]',
+                device_name TEXT NOT NULL DEFAULT 'Passkey',
                 created_at TEXT NOT NULL,
                 last_used_at TEXT
             )
         """)
+        credential_columns = {
+            row["name"] for row in conn.execute("PRAGMA table_info(webauthn_credentials)")
+        }
+        if "device_name" not in credential_columns:
+            conn.execute(
+                "ALTER TABLE webauthn_credentials ADD COLUMN device_name TEXT NOT NULL DEFAULT 'Passkey'"
+            )
         conn.execute("""
             CREATE TABLE IF NOT EXISTS webauthn_challenges (
                 ceremony_id TEXT PRIMARY KEY,
@@ -104,18 +112,20 @@ def get_credentials_for_user(user_id: int):
 def get_credential(credential_id: str):
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT credential_id, user_id, public_key, sign_count FROM webauthn_credentials WHERE credential_id = ?",
+            """SELECT credential_id, user_id, public_key, sign_count, device_name
+               FROM webauthn_credentials WHERE credential_id = ?""",
             (credential_id,)
         ).fetchone()
         return dict(row) if row else None
 
-def save_credential(credential_id: str, user_id: int, public_key: bytes, sign_count: int, transports: str):
+def save_credential(credential_id: str, user_id: int, public_key: bytes, sign_count: int,
+                    transports: str, device_name: str):
     with get_connection() as conn:
         conn.execute(
             """INSERT INTO webauthn_credentials
-               (credential_id, user_id, public_key, sign_count, transports, created_at)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (credential_id, user_id, public_key, sign_count, transports,
+               (credential_id, user_id, public_key, sign_count, transports, device_name, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (credential_id, user_id, public_key, sign_count, transports, device_name,
              datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
         )
         conn.commit()

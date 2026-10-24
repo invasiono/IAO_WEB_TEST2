@@ -575,6 +575,28 @@ body {
   line-height: 1.5;
 }
 
+.passkey-form {
+  margin-top: 12px;
+}
+
+.passkey-form label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.passkey-form input {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--text-dark);
+  font-size: 14px;
+}
+
 /* Spinner */
 .spinner {
   width: 18px;

@@ -119,7 +119,37 @@ The Flask implementation in `app.py` exposes:
 3. `POST /api/passkeys/authenticate/options` — creates an anonymous discoverable-credential challenge with user verification required.
 4. `POST /api/passkeys/authenticate/verify` — consumes the challenge, looks up the credential, verifies the assertion signature, origin, RP ID hash, challenge, and user-presence/verification flags, then updates its signature counter and creates the login session.
 
-The browser code in `static/script.js` converts WebAuthn's binary fields to/from base64url before sending JSON. Ceremony challenges are kept in SQLite, expire after five minutes, and are atomically consumed once. A challenge is invalidated even if verification fails.
+The passkey browser code uses `new FormData(formElement)` to collect the form's current named inputs, then appends the ceremony ID and serialized WebAuthn response (`clientDataJSON`, authenticator data, signature, etc.). It passes the `FormData` object directly to `fetch` without setting a `Content-Type` header so the browser generates the multipart boundary. The server accepts multipart or URL-encoded form bodies only on these endpoints; the credential JSON is a form field, not a JSON request body. Ceremony challenges are kept in SQLite, expire after five minutes, and are atomically consumed once. A challenge is invalidated even if verification fails.
+
+The core browser pattern used by the UI is:
+
+```js
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const formData = new FormData(form); // capture named HTML inputs dynamically
+  formData.set("action", "register");
+
+  const optionsResponse = await fetch("/api/passkeys/register/options", {
+    method: "POST",
+    body: formData, // browser sets multipart/form-data and its boundary
+    credentials: "same-origin"
+  });
+  const { ceremony_id, options } = await optionsResponse.json();
+  const credential = await navigator.credentials.create({
+    publicKey: decodeCreationOptions(options)
+  });
+
+  formData.set("ceremony_id", ceremony_id);
+  formData.set("credential", JSON.stringify(serializeCredential(credential)));
+  const verifyResponse = await fetch("/api/passkeys/register/verify", {
+    method: "POST",
+    body: formData,
+    credentials: "same-origin"
+  });
+});
+```
+
+The implementation in `static/script.js` contains the serialization and base64url helpers for both `navigator.credentials.create()` and `.get()`.
 
 SQLite initializes these tables in `database.py`:
 
@@ -130,6 +160,7 @@ CREATE TABLE webauthn_credentials (
   public_key BLOB NOT NULL,
   sign_count INTEGER NOT NULL DEFAULT 0,
   transports TEXT NOT NULL DEFAULT '[]',
+  device_name TEXT NOT NULL DEFAULT 'Passkey',
   created_at TEXT NOT NULL,
   last_used_at TEXT
 );

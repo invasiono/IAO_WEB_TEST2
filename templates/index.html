@@ -51,7 +51,7 @@
             <label for="inputFullname">Họ và Tên</label>
             <div class="input-wrapper">
               <svg class="input-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-              <input type="text" id="inputFullname" placeholder="Ví dụ: Nguyễn Văn Nam" autocomplete="name">
+              <input type="text" id="inputFullname" name="fullname" placeholder="Ví dụ: Nguyễn Văn Nam" autocomplete="name">
             </div>
           </div>
 
@@ -60,7 +60,7 @@
             <label for="inputEmail">Địa chỉ Email thực tế</label>
             <div class="input-wrapper">
               <svg class="input-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
-              <input type="email" id="inputEmail" placeholder="vd: yourname@gmail.com" required autocomplete="email">
+              <input type="email" id="inputEmail" name="email" placeholder="vd: yourname@gmail.com" required autocomplete="email">
             </div>
             <span class="field-tip" id="emailTip">🔍 Hệ thống sẽ tự động xác thực tên miền và kiểm tra máy chủ nhận thư (DNS MX) thực tế trước khi gửi mã.</span>
           </div>
@@ -73,7 +73,8 @@
           </button>
           <div class="passkey-separator">hoặc</div>
           <div id="passkeyLoginAlert" class="alert-box hidden"></div>
-          <button type="button" id="btnPasskeyLogin" class="btn-secondary passkey-button">
+          <button type="submit" id="btnPasskeyLogin" name="auth_method" value="passkey"
+                  formnovalidate class="btn-secondary passkey-button">
             Đăng nhập bằng Passkey
           </button>
         </form>
@@ -179,9 +180,15 @@
           <h4>Passkeys</h4>
           <p>Thêm passkey để đăng nhập nhanh chóng và chống giả mạo miền bằng Origin Binding.</p>
           <div id="passkeyRegistrationAlert" class="alert-box hidden"></div>
-          <button type="button" id="btnRegisterPasskey" class="btn-secondary passkey-button">
-            Thêm passkey cho thiết bị này
-          </button>
+          <form id="formPasskeyRegistration" class="passkey-form">
+            <input type="hidden" name="action" value="register">
+            <label for="passkeyDeviceName">Tên thiết bị (tùy chọn)</label>
+            <input id="passkeyDeviceName" name="device_name" type="text"
+                   maxlength="80" autocomplete="off" placeholder="Ví dụ: Laptop cá nhân">
+            <button type="submit" id="btnRegisterPasskey" class="btn-secondary passkey-button">
+              Thêm passkey cho thiết bị này
+            </button>
+          </form>
         </div>
 
         <!-- DANH SÁCH TÀI KHOẢN ĐÃ LƯU TRONG HỆ THỐNG -->

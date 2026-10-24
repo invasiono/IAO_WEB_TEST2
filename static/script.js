@@ -24,6 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const emailAlert = document.getElementById('emailAlert');
   const btnPasskeyLogin = document.getElementById('btnPasskeyLogin');
   const passkeyLoginAlert = document.getElementById('passkeyLoginAlert');
+  const formPasskeyRegistration = document.getElementById('formPasskeyRegistration');
   const btnRegisterPasskey = document.getElementById('btnRegisterPasskey');
   const passkeyRegistrationAlert = document.getElementById('passkeyRegistrationAlert');
 
@@ -283,12 +284,20 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
-  async function postPasskey(endpoint, body = {}) {
+  async function postPasskey(endpoint, formElement, fields = {}) {
+    const formData = new FormData(formElement);
+    Object.entries(fields).forEach(([name, value]) => {
+      const serialized = typeof value === 'string' ? value : JSON.stringify(value);
+      if (name === 'credential') {
+        formData.append(name, serialized);
+      } else {
+        formData.set(name, serialized);
+      }
+    });
     const response = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       credentials: 'same-origin',
-      body: JSON.stringify(body)
+      body: formData
     });
     const data = await response.json();
     if (!response.ok || !data.success) {
@@ -297,7 +306,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return data;
   }
 
-  btnPasskeyLogin.addEventListener('click', async () => {
+  async function submitPasskeyLogin() {
     hideAlert(passkeyLoginAlert);
     if (!window.isSecureContext || !navigator.credentials?.get) {
       showAlert(passkeyLoginAlert, 'Passkeys require HTTPS (localhost is allowed) and a compatible browser.');
@@ -305,12 +314,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     btnPasskeyLogin.disabled = true;
     try {
-      const { ceremony_id, options } = await postPasskey('/api/passkeys/authenticate/options');
+      const { ceremony_id, options } = await postPasskey(
+        '/api/passkeys/authenticate/options',
+        formSendOtp,
+        { action: 'authenticate' }
+      );
       const assertion = await navigator.credentials.get({
         publicKey: preparePasskeyOptions(options)
       });
       if (!assertion) throw new Error('Passkey authentication was cancelled.');
-      const result = await postPasskey('/api/passkeys/authenticate/verify', {
+      const result = await postPasskey('/api/passkeys/authenticate/verify', formSendOtp, {
+        action: 'authenticate',
         ceremony_id,
         credential: serializePasskeyCredential(assertion)
       });
@@ -322,9 +336,10 @@ document.addEventListener('DOMContentLoaded', () => {
     } finally {
       btnPasskeyLogin.disabled = false;
     }
-  });
+  }
 
-  btnRegisterPasskey.addEventListener('click', async () => {
+  formPasskeyRegistration.addEventListener('submit', async (event) => {
+    event.preventDefault();
     hideAlert(passkeyRegistrationAlert);
     if (!window.isSecureContext || !navigator.credentials?.create) {
       showAlert(passkeyRegistrationAlert, 'Passkeys require HTTPS (localhost is allowed) and a compatible browser.');
@@ -332,12 +347,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     btnRegisterPasskey.disabled = true;
     try {
-      const { ceremony_id, options } = await postPasskey('/api/passkeys/register/options');
+      const { ceremony_id, options } = await postPasskey(
+        '/api/passkeys/register/options',
+        formPasskeyRegistration
+      );
       const attestation = await navigator.credentials.create({
         publicKey: preparePasskeyOptions(options)
       });
       if (!attestation) throw new Error('Passkey registration was cancelled.');
-      await postPasskey('/api/passkeys/register/verify', {
+      await postPasskey('/api/passkeys/register/verify', formPasskeyRegistration, {
         ceremony_id,
         credential: serializePasskeyCredential(attestation)
       });
@@ -354,6 +372,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // 2. Handle Send OTP with Email Real Existence Check
   formSendOtp.addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (e.submitter === btnPasskeyLogin) {
+      await submitPasskeyLogin();
+      return;
+    }
     hideAlert(emailAlert);
 
     const email = inputEmail.value.trim().toLowerCase();

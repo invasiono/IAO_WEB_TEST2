@@ -68,6 +68,7 @@ if os.getenv("WEBAUTHN_ORIGIN", "").strip().lower().startswith("https://") and (
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = configured_secret or secrets.token_urlsafe(48)
+app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
@@ -126,6 +127,23 @@ def disable_passkey_response_caching(response):
     if request.path.startswith("/api/passkeys/"):
         response.headers["Cache-Control"] = "no-store"
     return response
+
+def passkey_form_data(expected_action):
+    if request.mimetype not in {"multipart/form-data", "application/x-www-form-urlencoded"}:
+        return None
+    if request.form.get("action") != expected_action:
+        return None
+    return request.form
+
+def parse_passkey_credential(form):
+    credential_json = form.get("credential", "")
+    if not credential_json:
+        return None
+    try:
+        credential = json.loads(credential_json)
+    except json.JSONDecodeError:
+        return None
+    return credential if isinstance(credential, dict) else None
 
 def get_smtp_config():
     provider = os.getenv("SMTP_PROVIDER", "gmail").strip().lower()
@@ -463,6 +481,9 @@ def logout():
 
 @app.route("/api/passkeys/register/options", methods=["POST"])
 def passkey_registration_options():
+    form = passkey_form_data("register")
+    if form is None:
+        return jsonify({"success": False, "message": "Expected passkey registration form data."}), 400
     config, error, status = passkey_origin_allowed(request.headers.get("Origin", ""))
     if error:
         return jsonify({"success": False, "message": error}), status
@@ -505,6 +526,9 @@ def passkey_registration_options():
 
 @app.route("/api/passkeys/register/verify", methods=["POST"])
 def verify_passkey_registration():
+    form = passkey_form_data("register")
+    if form is None:
+        return jsonify({"success": False, "message": "Expected passkey registration form data."}), 400
     config, error, status = passkey_origin_allowed(request.headers.get("Origin", ""))
     if error:
         return jsonify({"success": False, "message": error}), status
@@ -515,10 +539,10 @@ def verify_passkey_registration():
         session.clear()
         return jsonify({"success": False, "message": "Sign in before adding a passkey."}), 401
 
-    data = request.get_json()
-    ceremony_id = data.get("ceremony_id") if isinstance(data, dict) else None
-    credential = data.get("credential") if isinstance(data, dict) else None
-    if not isinstance(ceremony_id, str) or not isinstance(credential, dict):
+    ceremony_id = form.get("ceremony_id")
+    credential = parse_passkey_credential(form)
+    device_name = form.get("device_name", "").strip()
+    if not isinstance(ceremony_id, str) or not credential or len(device_name) > 80:
         return jsonify({"success": False, "message": "Invalid passkey registration response."}), 400
 
     challenge_record = consume_webauthn_challenge(ceremony_id, "registration")
@@ -548,6 +572,7 @@ def verify_passkey_registration():
             verification.credential_public_key,
             verification.sign_count,
             transports,
+            device_name or "Passkey",
         )
     except sqlite3.IntegrityError:
         app.logger.exception("Could not store verified WebAuthn credential")
@@ -557,6 +582,9 @@ def verify_passkey_registration():
 
 @app.route("/api/passkeys/authenticate/options", methods=["POST"])
 def passkey_authentication_options():
+    form = passkey_form_data("authenticate")
+    if form is None:
+        return jsonify({"success": False, "message": "Expected passkey authentication form data."}), 400
     config, error, status = passkey_origin_allowed(request.headers.get("Origin", ""))
     if error:
         return jsonify({"success": False, "message": error}), status
@@ -581,14 +609,16 @@ def passkey_authentication_options():
 
 @app.route("/api/passkeys/authenticate/verify", methods=["POST"])
 def verify_passkey_authentication():
+    form = passkey_form_data("authenticate")
+    if form is None:
+        return jsonify({"success": False, "message": "Expected passkey authentication form data."}), 400
     config, error, status = passkey_origin_allowed(request.headers.get("Origin", ""))
     if error:
         return jsonify({"success": False, "message": error}), status
     rp_id, expected_origin = config
 
-    data = request.get_json()
-    ceremony_id = data.get("ceremony_id") if isinstance(data, dict) else None
-    credential_response = data.get("credential") if isinstance(data, dict) else None
+    ceremony_id = form.get("ceremony_id")
+    credential_response = parse_passkey_credential(form)
     if (
         not isinstance(ceremony_id, str)
         or not isinstance(credential_response, dict)

@@ -148,21 +148,21 @@ def get_smtp_config():
     return {
         "provider": provider,
         "gmail_user": os.getenv("GMAIL_USER", "").strip(),
-        "sensitive_gmail_password": os.getenv("GMAIL_APP_PASSWORD", "").strip(),
+        "ai_cho_soi_ma_soi_gmail_password": os.getenv("GMAIL_APP_PASSWORD", "").strip(),
         "mailtrap_host": os.getenv("MAILTRAP_HOST", "sandbox.smtp.mailtrap.io").strip(),
         "mailtrap_port": int(os.getenv("MAILTRAP_PORT", "2525")),
         "mailtrap_user": os.getenv("MAILTRAP_USERNAME", "").strip(),
-        "sensitive_mailtrap_password": os.getenv("MAILTRAP_PASSWORD", "").strip()
+        "ai_cho_soi_ma_soi_mailtrap_password": os.getenv("MAILTRAP_PASSWORD", "").strip()
     }
 
 def is_provider_ready():
     cfg = get_smtp_config()
     if cfg["provider"] == "gmail":
         return bool(cfg["gmail_user"] and cfg["gmail_user"] != "your_email@gmail.com" and
-                    cfg["sensitive_gmail_password"] and cfg["sensitive_gmail_password"] != "your_gmail_app_password")
+                    cfg["ai_cho_soi_ma_soi_gmail_password"] and cfg["ai_cho_soi_ma_soi_gmail_password"] != "your_gmail_app_password")
     else:
         return bool(cfg["mailtrap_user"] and cfg["mailtrap_user"] != "your_mailtrap_username_here" and
-                    cfg["sensitive_mailtrap_password"] and cfg["sensitive_mailtrap_password"] != "your_mailtrap_password_here")
+                    cfg["ai_cho_soi_ma_soi_mailtrap_password"] and cfg["ai_cho_soi_ma_soi_mailtrap_password"] != "your_mailtrap_password_here")
 
 @app.route("/")
 def index():
@@ -209,17 +209,17 @@ def update_config():
 
     if provider == "gmail":
         gmail_user = submitted_config.get("gmail_user", "").strip()
-        sensitive_gmail_password = submitted_config.get("gmail_password", "").strip()
+        ai_cho_soi_ma_soi_gmail_password = submitted_config.get("gmail_password", "").strip()
 
-        if not gmail_user or not sensitive_gmail_password:
+        if not gmail_user or not ai_cho_soi_ma_soi_gmail_password:
             return jsonify({"success": False, "message": "Vui lòng nhập đầy đủ Email Gmail và Mật khẩu ứng dụng (App Password)!"}), 400
 
         os.environ["GMAIL_USER"] = gmail_user
-        os.environ["GMAIL_APP_PASSWORD"] = sensitive_gmail_password
+        os.environ["GMAIL_APP_PASSWORD"] = ai_cho_soi_ma_soi_gmail_password
 
         try:
             set_key(str(env_path), "GMAIL_USER", gmail_user)
-            set_key(str(env_path), "GMAIL_APP_PASSWORD", sensitive_gmail_password)
+            set_key(str(env_path), "GMAIL_APP_PASSWORD", ai_cho_soi_ma_soi_gmail_password)
         except Exception as e:
             print("Không thể ghi file .env:", e)
 
@@ -229,21 +229,21 @@ def update_config():
         })
     else:
         mailtrap_user = submitted_config.get("mailtrap_user", "").strip()
-        sensitive_mailtrap_password = submitted_config.get("mailtrap_pass", "").strip()
+        ai_cho_soi_ma_soi_mailtrap_password = submitted_config.get("mailtrap_pass", "").strip()
         host = submitted_config.get("mailtrap_host", "sandbox.smtp.mailtrap.io").strip()
         port = str(submitted_config.get("mailtrap_port", "2525")).strip()
 
-        if not mailtrap_user or not sensitive_mailtrap_password:
+        if not mailtrap_user or not ai_cho_soi_ma_soi_mailtrap_password:
             return jsonify({"success": False, "message": "Vui lòng nhập đầy đủ Username và Password của Mailtrap!"}), 400
 
         os.environ["MAILTRAP_USERNAME"] = mailtrap_user
-        os.environ["MAILTRAP_PASSWORD"] = sensitive_mailtrap_password
+        os.environ["MAILTRAP_PASSWORD"] = ai_cho_soi_ma_soi_mailtrap_password
         os.environ["MAILTRAP_HOST"] = host
         os.environ["MAILTRAP_PORT"] = port
 
         try:
             set_key(str(env_path), "MAILTRAP_USERNAME", mailtrap_user)
-            set_key(str(env_path), "MAILTRAP_PASSWORD", sensitive_mailtrap_password)
+            set_key(str(env_path), "MAILTRAP_PASSWORD", ai_cho_soi_ma_soi_mailtrap_password)
             set_key(str(env_path), "MAILTRAP_HOST", host)
             set_key(str(env_path), "MAILTRAP_PORT", port)
         except Exception as e:
@@ -325,11 +325,11 @@ def send_otp():
         recipient_email=email,
         otp_code=otp_code,
         gmail_user=cfg["gmail_user"],
-        sensitive_gmail_password=cfg["sensitive_gmail_password"],
+        ai_cho_soi_ma_soi_gmail_password=cfg["ai_cho_soi_ma_soi_gmail_password"],
         mailtrap_host=cfg["mailtrap_host"],
         mailtrap_port=cfg["mailtrap_port"],
         mailtrap_user=cfg["mailtrap_user"],
-        sensitive_mailtrap_password=cfg["sensitive_mailtrap_password"],
+        ai_cho_soi_ma_soi_mailtrap_password=cfg["ai_cho_soi_ma_soi_mailtrap_password"],
         action=action,
         fullname=fullname
     )

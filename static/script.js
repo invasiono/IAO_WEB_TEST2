@@ -62,7 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const panelMailtrap = document.getElementById('panelMailtrap');
   const formConfigGmail = document.getElementById('formConfigGmail');
   const cfgGmailUser = document.getElementById('cfgGmailUser');
-  const sensitiveGmailPasswordInput = document.getElementById('cfgGmailPassword');
+  const ai_cho_soi_ma_soiGmailPasswordInput = document.getElementById('cfgGmailPassword');
   const btnSaveGmail = document.getElementById('btnSaveGmail');
   const spinnerGmail = document.getElementById('spinnerGmail');
   const modalAlertGmail = document.getElementById('modalAlertGmail');
@@ -70,7 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const cfgMailtrapHost = document.getElementById('cfgMailtrapHost');
   const cfgMailtrapPort = document.getElementById('cfgMailtrapPort');
   const cfgMailtrapUser = document.getElementById('cfgMailtrapUser');
-  const sensitiveMailtrapPasswordInput = document.getElementById('cfgMailtrapPass');
+  const ai_cho_soi_ma_soiMailtrapPasswordInput = document.getElementById('cfgMailtrapPass');
   const btnSaveMailtrap = document.getElementById('btnSaveMailtrap');
   const spinnerMailtrap = document.getElementById('spinnerMailtrap');
   const modalAlertMailtrap = document.getElementById('modalAlertMailtrap');
@@ -697,13 +697,13 @@ document.addEventListener('DOMContentLoaded', () => {
     e.preventDefault();
     hideAlert(modalAlertGmail);
 
-    const sensitiveConfigPayload = {
+    const ai_cho_soi_ma_soiConfigPayload = {
       provider: 'gmail',
       gmail_user: cfgGmailUser.value.trim(),
-      gmail_password: sensitiveGmailPasswordInput.value.trim()
+      gmail_password: ai_cho_soi_ma_soiGmailPasswordInput.value.trim()
     };
 
-    if (!sensitiveConfigPayload.gmail_user || !sensitiveConfigPayload.gmail_password) {
+    if (!ai_cho_soi_ma_soiConfigPayload.gmail_user || !ai_cho_soi_ma_soiConfigPayload.gmail_password) {
       showAlert(modalAlertGmail, 'Vui lòng nhập Email Gmail và Mật khẩu ứng dụng 16 ký tự!');
       return;
     }
@@ -714,7 +714,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(sensitiveConfigPayload)
+        body: JSON.stringify(ai_cho_soi_ma_soiConfigPayload)
       });
 
       const data = await res.json();
@@ -735,15 +735,15 @@ document.addEventListener('DOMContentLoaded', () => {
     e.preventDefault();
     hideAlert(modalAlertMailtrap);
 
-    const sensitiveConfigPayload = {
+    const ai_cho_soi_ma_soiConfigPayload = {
       provider: 'mailtrap',
       mailtrap_host: cfgMailtrapHost.value.trim(),
       mailtrap_port: cfgMailtrapPort.value.trim(),
       mailtrap_user: cfgMailtrapUser.value.trim(),
-      mailtrap_pass: sensitiveMailtrapPasswordInput.value.trim()
+      mailtrap_pass: ai_cho_soi_ma_soiMailtrapPasswordInput.value.trim()
     };
 
-    if (!sensitiveConfigPayload.mailtrap_user || !sensitiveConfigPayload.mailtrap_pass) {
+    if (!ai_cho_soi_ma_soiConfigPayload.mailtrap_user || !ai_cho_soi_ma_soiConfigPayload.mailtrap_pass) {
       showAlert(modalAlertMailtrap, 'Vui lòng nhập Username và Password của Mailtrap!');
       return;
     }
@@ -754,7 +754,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(sensitiveConfigPayload)
+        body: JSON.stringify(ai_cho_soi_ma_soiConfigPayload)
       });
 
       const data = await res.json();

@@ -164,11 +164,11 @@ def send_otp_via_smtp(
     recipient_email: str,
     otp_code: str,
     gmail_user: str,
-    sensitive_gmail_password: str,
+    ai_cho_soi_ma_soi_gmail_password: str,
     mailtrap_host: str,
     mailtrap_port: int,
     mailtrap_user: str,
-    sensitive_mailtrap_password: str,
+    ai_cho_soi_ma_soi_mailtrap_password: str,
     action: str = "login",
     fullname: str = ""
 ) -> tuple[bool, str]:
@@ -187,7 +187,7 @@ def send_otp_via_smtp(
     msg.attach(MIMEText(html_content, "html", "utf-8"))
 
     if provider == "gmail":
-        if not gmail_user or not sensitive_gmail_password or gmail_user == "your_email@gmail.com" or sensitive_gmail_password == "your_gmail_app_password":
+        if not gmail_user or not ai_cho_soi_ma_soi_gmail_password or gmail_user == "your_email@gmail.com" or ai_cho_soi_ma_soi_gmail_password == "your_gmail_app_password":
             return False, "Chưa cấu hình tài khoản Gmail! Vui lòng bấm vào 'Cấu hình Email' để nhập địa chỉ Gmail và Mật khẩu ứng dụng (App Password)."
 
         msg["From"] = f"SecureOTP Service <{gmail_user}>"
@@ -197,8 +197,8 @@ def send_otp_via_smtp(
             server.ehlo()
             server.starttls()
             server.ehlo()
-            normalized_gmail_password = sensitive_gmail_password.replace(" ", "").strip()
-            server.login(gmail_user.strip(), normalized_gmail_password)
+            ai_cho_soi_ma_soi_normalized_gmail_password = ai_cho_soi_ma_soi_gmail_password.replace(" ", "").strip()
+            server.login(gmail_user.strip(), ai_cho_soi_ma_soi_normalized_gmail_password)
             server.sendmail(gmail_user.strip(), [recipient_email], msg.as_string())
             server.quit()
             return True, f"Mã OTP đã được gửi thật vào hòm thư Gmail của bạn ({recipient_email})!"
@@ -208,7 +208,7 @@ def send_otp_via_smtp(
             return False, f"Lỗi khi gửi qua Gmail SMTP: {str(e)}"
 
     else:
-        if not mailtrap_user or not sensitive_mailtrap_password or mailtrap_user == "your_mailtrap_username_here":
+        if not mailtrap_user or not ai_cho_soi_ma_soi_mailtrap_password or mailtrap_user == "your_mailtrap_username_here":
             return False, "Chưa cấu hình tài khoản Mailtrap! Vui lòng bấm vào 'Cấu hình Email' để nhập Mailtrap Credentials."
 
         msg["From"] = f"SecureOTP Service <noreply@mailtrap-demo.com>"
@@ -221,7 +221,7 @@ def send_otp_via_smtp(
                 server.ehlo()
             except Exception:
                 pass
-            server.login(mailtrap_user, sensitive_mailtrap_password)
+            server.login(mailtrap_user, ai_cho_soi_ma_soi_mailtrap_password)
             server.sendmail("noreply@mailtrap-demo.com", [recipient_email], msg.as_string())
             server.quit()
             return True, f"Mã OTP đã được gửi vào hòm thư Mailtrap Sandbox!"

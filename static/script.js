@@ -22,6 +22,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnSendOtp = document.getElementById('btnSendOtp');
   const spinnerSend = document.getElementById('spinnerSend');
   const emailAlert = document.getElementById('emailAlert');
+  const btnPasskeyLogin = document.getElementById('btnPasskeyLogin');
+  const passkeyLoginAlert = document.getElementById('passkeyLoginAlert');
+  const btnRegisterPasskey = document.getElementById('btnRegisterPasskey');
+  const passkeyRegistrationAlert = document.getElementById('passkeyRegistrationAlert');
 
   // Form 2: OTP
   const otpActionBadge = document.getElementById('otpActionBadge');
@@ -103,8 +107,10 @@ document.addEventListener('DOMContentLoaded', () => {
   function setMode(mode) {
     currentMode = mode;
     hideAlert(emailAlert);
+    hideAlert(passkeyLoginAlert);
 
     if (mode === 'register') {
+      btnPasskeyLogin.classList.add('hidden');
       tabRegister.classList.add('active');
       tabLogin.classList.remove('active');
       groupFullname.classList.remove('hidden');
@@ -116,6 +122,7 @@ document.addEventListener('DOMContentLoaded', () => {
       toggleQuestion.textContent = 'Đã có tài khoản?';
       btnToggleMode.textContent = 'Đăng nhập ngay';
     } else {
+      btnPasskeyLogin.classList.remove('hidden');
       tabLogin.classList.add('active');
       tabRegister.classList.remove('active');
       groupFullname.classList.add('hidden');
@@ -226,6 +233,123 @@ document.addEventListener('DOMContentLoaded', () => {
     elem.classList.add('hidden');
     elem.textContent = '';
   }
+
+  function base64urlToBuffer(value) {
+    const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=');
+    return Uint8Array.from(atob(padded), char => char.charCodeAt(0)).buffer;
+  }
+
+  function bufferToBase64url(buffer) {
+    let binary = '';
+    new Uint8Array(buffer).forEach(byte => { binary += String.fromCharCode(byte); });
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  }
+
+  function preparePasskeyOptions(options) {
+    options.challenge = base64urlToBuffer(options.challenge);
+    if (options.user) options.user.id = base64urlToBuffer(options.user.id);
+    for (const credential of options.allowCredentials || []) {
+      credential.id = base64urlToBuffer(credential.id);
+    }
+    for (const credential of options.excludeCredentials || []) {
+      credential.id = base64urlToBuffer(credential.id);
+    }
+    return options;
+  }
+
+  function serializePasskeyCredential(credential) {
+    const response = {
+      clientDataJSON: bufferToBase64url(credential.response.clientDataJSON)
+    };
+    if ('attestationObject' in credential.response) {
+      response.attestationObject = bufferToBase64url(credential.response.attestationObject);
+      response.transports = credential.response.getTransports?.() || [];
+    }
+    if ('authenticatorData' in credential.response) {
+      response.authenticatorData = bufferToBase64url(credential.response.authenticatorData);
+      response.signature = bufferToBase64url(credential.response.signature);
+      response.userHandle = credential.response.userHandle
+        ? bufferToBase64url(credential.response.userHandle)
+        : null;
+    }
+    return {
+      id: credential.id,
+      rawId: bufferToBase64url(credential.rawId),
+      type: credential.type,
+      response,
+      clientExtensionResults: credential.getClientExtensionResults(),
+      authenticatorAttachment: credential.authenticatorAttachment
+    };
+  }
+
+  async function postPasskey(endpoint, body = {}) {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify(body)
+    });
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      throw new Error(data.message || 'Passkey operation failed.');
+    }
+    return data;
+  }
+
+  btnPasskeyLogin.addEventListener('click', async () => {
+    hideAlert(passkeyLoginAlert);
+    if (!window.isSecureContext || !navigator.credentials?.get) {
+      showAlert(passkeyLoginAlert, 'Passkeys require HTTPS (localhost is allowed) and a compatible browser.');
+      return;
+    }
+    btnPasskeyLogin.disabled = true;
+    try {
+      const { ceremony_id, options } = await postPasskey('/api/passkeys/authenticate/options');
+      const assertion = await navigator.credentials.get({
+        publicKey: preparePasskeyOptions(options)
+      });
+      if (!assertion) throw new Error('Passkey authentication was cancelled.');
+      const result = await postPasskey('/api/passkeys/authenticate/verify', {
+        ceremony_id,
+        credential: serializePasskeyCredential(assertion)
+      });
+      showDashboard(result.user, 'Passkey login successful!');
+    } catch (error) {
+      showAlert(passkeyLoginAlert, error.name === 'NotAllowedError'
+        ? 'Passkey authentication was cancelled or timed out.'
+        : error.message);
+    } finally {
+      btnPasskeyLogin.disabled = false;
+    }
+  });
+
+  btnRegisterPasskey.addEventListener('click', async () => {
+    hideAlert(passkeyRegistrationAlert);
+    if (!window.isSecureContext || !navigator.credentials?.create) {
+      showAlert(passkeyRegistrationAlert, 'Passkeys require HTTPS (localhost is allowed) and a compatible browser.');
+      return;
+    }
+    btnRegisterPasskey.disabled = true;
+    try {
+      const { ceremony_id, options } = await postPasskey('/api/passkeys/register/options');
+      const attestation = await navigator.credentials.create({
+        publicKey: preparePasskeyOptions(options)
+      });
+      if (!attestation) throw new Error('Passkey registration was cancelled.');
+      await postPasskey('/api/passkeys/register/verify', {
+        ceremony_id,
+        credential: serializePasskeyCredential(attestation)
+      });
+      showAlert(passkeyRegistrationAlert, 'Passkey registered successfully on this device.', 'success');
+    } catch (error) {
+      showAlert(passkeyRegistrationAlert, error.name === 'NotAllowedError'
+        ? 'Passkey registration was cancelled or timed out.'
+        : error.message);
+    } finally {
+      btnRegisterPasskey.disabled = false;
+    }
+  });
 
   // 2. Handle Send OTP with Email Real Existence Check
   formSendOtp.addEventListener('submit', async (e) => {
@@ -486,6 +610,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 6. Dashboard & User Accounts List
   function showDashboard(user, title = 'Đăng nhập thành công!', subtitle = '') {
+    hideAlert(passkeyRegistrationAlert);
     dashGreetingTitle.textContent = title;
     if (subtitle) {
       dashGreetingSubtitle.textContent = subtitle;
@@ -557,6 +682,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     currentEmail = '';
     currentFullname = '';
+    hideAlert(passkeyLoginAlert);
+    hideAlert(passkeyRegistrationAlert);
     inputEmail.value = '';
     inputFullname.value = '';
     clearOtpInputs();

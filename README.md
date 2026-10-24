@@ -72,3 +72,76 @@ python app.py
 2. Nhập một email bất kỳ (ví dụ: `test@example.com`) rồi bấm **"Gửi mã OTP qua Mailtrap"**.
 3. Mở tab [Mailtrap Inboxes](https://mailtrap.io/inboxes), bạn sẽ thấy ngay email mới gửi đến chứa mã OTP 6 số.
 4. Copy mã OTP dán vào web và bấm **"Xác nhận & Đăng nhập"** để vào Dashboard!
+
+---
+
+## Passwordless Passkeys (WebAuthn / FIDO2)
+
+Passkeys are available alongside email OTP. Users first create an account or sign in with the existing OTP flow, then add a passkey from the dashboard. Later they can use **Đăng nhập bằng Passkey** without entering an email. The login ceremony uses discoverable credentials, so users may select the account on their device.
+
+### Configure the relying party
+
+Set both values in the server's `.env` (or deployment environment). They are server-side trust settings and must never come from a request `Host` header or client input:
+
+```env
+# Local development (WebAuthn permits insecure localhost origins)
+WEBAUTHN_ORIGIN=http://localhost:5000
+WEBAUTHN_RP_ID=localhost
+
+# Production example (serve the site over HTTPS)
+# WEBAUTHN_ORIGIN=https://example.com
+# WEBAUTHN_RP_ID=example.com
+```
+
+`WEBAUTHN_ORIGIN` is the exact browser origin: scheme, host, and any non-default port, with no trailing slash or path. `WEBAUTHN_RP_ID` is set to exactly that origin's hostname in this implementation (not a parent domain). The app rejects missing or mismatched configuration, rejects a different HTTP `Origin` header, and asks the WebAuthn verifier to validate both this exact origin and RP ID against the signed client data and authenticator data. This combination prevents a lookalike/reverse-proxy domain from completing an assertion for this site. Do not expose the site behind an untrusted reverse proxy; configure the canonical public origin explicitly.
+
+Generate a private session key and set it as `SECRET_KEY` (the app refuses to start with a short/default key when configured for production HTTPS):
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+### Run and use
+
+```bash
+python -m pip install -r requirements.txt
+python app.py
+```
+
+Open the site using the same origin configured above. Production must use HTTPS. After an OTP login, select **Thêm passkey cho thiết bị này** and follow the browser/platform prompt. On a subsequent visit use **Đăng nhập bằng Passkey**. Passkey registration requires an authenticated OTP session; passkey sign-in requires user verification (for example, device PIN or biometrics). Keep another recovery method available before removing or replacing a device.
+
+### Backend flow and stored data
+
+The Flask implementation in `app.py` exposes:
+
+1. `POST /api/passkeys/register/options` — requires an authenticated session, generates a fresh challenge and resident-key options, and excludes credentials already on the account.
+2. `POST /api/passkeys/register/verify` — consumes the short-lived one-time challenge and verifies the response using the pinned `expected_origin`, exact `expected_rp_id`, and required user verification before storing the credential.
+3. `POST /api/passkeys/authenticate/options` — creates an anonymous discoverable-credential challenge with user verification required.
+4. `POST /api/passkeys/authenticate/verify` — consumes the challenge, looks up the credential, verifies the assertion signature, origin, RP ID hash, challenge, and user-presence/verification flags, then updates its signature counter and creates the login session.
+
+The browser code in `static/script.js` converts WebAuthn's binary fields to/from base64url before sending JSON. Ceremony challenges are kept in SQLite, expire after five minutes, and are atomically consumed once. A challenge is invalidated even if verification fails.
+
+SQLite initializes these tables in `database.py`:
+
+```sql
+CREATE TABLE webauthn_credentials (
+  credential_id TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  public_key BLOB NOT NULL,
+  sign_count INTEGER NOT NULL DEFAULT 0,
+  transports TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL,
+  last_used_at TEXT
+);
+
+CREATE TABLE webauthn_challenges (
+  ceremony_id TEXT PRIMARY KEY,
+  ceremony TEXT NOT NULL,
+  challenge TEXT NOT NULL,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  expires_at INTEGER NOT NULL,
+  consumed INTEGER NOT NULL DEFAULT 0
+);
+```
+
+The credential ID is the lookup key; the public key is stored as bytes and is used by the server to verify each assertion signature. Never accept a public key supplied by the browser at login or mark a user authenticated before successful signature verification. Configure a strong, private `SECRET_KEY` for Flask sessions in production.

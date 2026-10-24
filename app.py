@@ -3,12 +3,44 @@ import sys
 import time
 import secrets
 import re
+import json
+import sqlite3
+from urllib.parse import urlparse
 from datetime import datetime
 from pathlib import Path
 from flask import Flask, request, jsonify, render_template, session
 from dotenv import load_dotenv, set_key
+from webauthn import (
+    generate_authentication_options,
+    generate_registration_options,
+    options_to_json,
+    verify_authentication_response,
+    verify_registration_response,
+)
+from webauthn.helpers import base64url_to_bytes, bytes_to_base64url
+from webauthn.helpers.exceptions import (
+    WebAuthnException,
+)
+from webauthn.helpers.structs import (
+    AuthenticatorSelectionCriteria,
+    PublicKeyCredentialDescriptor,
+    ResidentKeyRequirement,
+    UserVerificationRequirement,
+)
 from mailer import send_otp_via_smtp, verify_email_real_existence
-from database import get_user_by_email, create_user, update_last_login, get_all_users
+from database import (
+    consume_webauthn_challenge,
+    create_webauthn_challenge,
+    get_credential,
+    get_credentials_for_user,
+    get_user_by_email,
+    get_user_by_id,
+    create_user,
+    update_credential_sign_count,
+    update_last_login,
+    get_all_users,
+    save_credential,
+)
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -24,8 +56,23 @@ if not env_path.exists():
 
 load_dotenv(dotenv_path=env_path)
 
+configured_secret = os.getenv("SECRET_KEY", "").strip()
+insecure_secret_values = {
+    "super-secret-key-otp-auth-demo-2026",
+    "dev-secret-key-otp-auth-2026",
+}
+if os.getenv("WEBAUTHN_ORIGIN", "").strip().lower().startswith("https://") and (
+    len(configured_secret) < 32 or configured_secret in insecure_secret_values
+):
+    raise RuntimeError("Production requires a private SECRET_KEY with at least 32 characters.")
+
 app = Flask(__name__, static_folder="static", template_folder="templates")
-app.secret_key = os.getenv("SECRET_KEY", "super-secret-key-otp-auth-demo-2026")
+app.secret_key = configured_secret or secrets.token_urlsafe(48)
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=os.getenv("WEBAUTHN_ORIGIN", "").strip().lower().startswith("https://"),
+)
 
 # In-memory store for OTPs
 otp_storage = {}
@@ -33,6 +80,52 @@ otp_storage = {}
 OTP_EXPIRY_SECONDS = 300  # 5 phút
 RESEND_COOLDOWN_SECONDS = 45  # 45 giây trước khi được yêu cầu gửi lại
 MAX_ATTEMPTS = 5
+WEBAUTHN_CHALLENGE_TTL_SECONDS = 300
+
+def get_webauthn_config():
+    """Load pinned WebAuthn identifiers; never derive them from request headers."""
+    origin = os.getenv("WEBAUTHN_ORIGIN", "").strip()
+    rp_id = os.getenv("WEBAUTHN_RP_ID", "").strip().lower()
+    if not origin or not rp_id:
+        raise ValueError("Set WEBAUTHN_ORIGIN and WEBAUTHN_RP_ID in the server environment.")
+
+    parsed = urlparse(origin)
+    try:
+        hostname = parsed.hostname
+        parsed.port
+    except ValueError as error:
+        raise ValueError("WEBAUTHN_ORIGIN must be a valid origin.") from error
+    if (
+        not hostname
+        or parsed.path
+        or parsed.query
+        or parsed.fragment
+        or parsed.username
+        or parsed.password
+        or origin.endswith("/")
+        or (parsed.scheme != "https" and hostname not in {"localhost", "127.0.0.1", "::1"})
+        or hostname.lower() != rp_id
+    ):
+        raise ValueError(
+            "WEBAUTHN_ORIGIN must be an HTTPS origin (HTTP only on localhost), "
+            "and WEBAUTHN_RP_ID must exactly equal its hostname."
+        )
+    return rp_id, origin
+
+def passkey_origin_allowed(origin):
+    try:
+        rp_id, expected_origin = get_webauthn_config()
+    except ValueError as error:
+        return None, str(error), 503
+    if origin != expected_origin:
+        return None, "Request Origin does not match the configured WebAuthn origin.", 403
+    return (rp_id, expected_origin), None, None
+
+@app.after_request
+def disable_passkey_response_caching(response):
+    if request.path.startswith("/api/passkeys/"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
 
 def get_smtp_config():
     provider = os.getenv("SMTP_PROVIDER", "gmail").strip().lower()
@@ -322,6 +415,7 @@ def verify_otp():
             return jsonify({"success": False, "message": "Tài khoản không tồn tại!"}), 400
         success_msg = f"Đăng nhập thành công! Chào mừng {user['fullname']} quay trở lại."
 
+    session.clear()
     session["user_email"] = user["email"]
     session["user_fullname"] = user["fullname"]
     session["logged_in_at"] = user["last_login"]
@@ -352,6 +446,9 @@ def get_current_user():
 
 @app.route("/api/users", methods=["GET"])
 def list_users():
+    if not get_user_by_email(session.get("user_email", "")):
+        session.clear()
+        return jsonify({"success": False, "message": "Authentication required."}), 401
     users = get_all_users()
     return jsonify({
         "success": True,
@@ -364,7 +461,183 @@ def logout():
     session.clear()
     return jsonify({"success": True, "message": "Đã đăng xuất thành công!"})
 
+@app.route("/api/passkeys/register/options", methods=["POST"])
+def passkey_registration_options():
+    config, error, status = passkey_origin_allowed(request.headers.get("Origin", ""))
+    if error:
+        return jsonify({"success": False, "message": error}), status
+    rp_id, _ = config
+
+    user = get_user_by_email(session.get("user_email", ""))
+    if not user:
+        session.clear()
+        return jsonify({"success": False, "message": "Sign in before adding a passkey."}), 401
+
+    existing_credentials = get_credentials_for_user(user["id"])
+    options = generate_registration_options(
+        rp_id=rp_id,
+        rp_name="SecureOTP System",
+        user_id=f"passkey-user:{user['id']}".encode("utf-8"),
+        user_name=user["email"],
+        user_display_name=user["fullname"],
+        authenticator_selection=AuthenticatorSelectionCriteria(
+            resident_key=ResidentKeyRequirement.REQUIRED,
+            user_verification=UserVerificationRequirement.REQUIRED,
+        ),
+        exclude_credentials=[
+            PublicKeyCredentialDescriptor(id=base64url_to_bytes(item["credential_id"]))
+            for item in existing_credentials
+        ],
+    )
+    ceremony_id = secrets.token_urlsafe(32)
+    create_webauthn_challenge(
+        ceremony_id,
+        "registration",
+        bytes_to_base64url(options.challenge),
+        user["id"],
+        int(datetime.now().timestamp()) + WEBAUTHN_CHALLENGE_TTL_SECONDS,
+    )
+    return jsonify({
+        "success": True,
+        "ceremony_id": ceremony_id,
+        "options": json.loads(options_to_json(options)),
+    })
+
+@app.route("/api/passkeys/register/verify", methods=["POST"])
+def verify_passkey_registration():
+    config, error, status = passkey_origin_allowed(request.headers.get("Origin", ""))
+    if error:
+        return jsonify({"success": False, "message": error}), status
+    rp_id, expected_origin = config
+
+    user = get_user_by_email(session.get("user_email", ""))
+    if not user:
+        session.clear()
+        return jsonify({"success": False, "message": "Sign in before adding a passkey."}), 401
+
+    data = request.get_json()
+    ceremony_id = data.get("ceremony_id") if isinstance(data, dict) else None
+    credential = data.get("credential") if isinstance(data, dict) else None
+    if not isinstance(ceremony_id, str) or not isinstance(credential, dict):
+        return jsonify({"success": False, "message": "Invalid passkey registration response."}), 400
+
+    challenge_record = consume_webauthn_challenge(ceremony_id, "registration")
+    if not challenge_record or challenge_record["user_id"] != user["id"]:
+        return jsonify({"success": False, "message": "Registration challenge is invalid, expired, or already used."}), 400
+    try:
+        verification = verify_registration_response(
+            credential=credential,
+            expected_challenge=base64url_to_bytes(challenge_record["challenge"]),
+            expected_rp_id=rp_id,
+            expected_origin=expected_origin,
+            require_user_verification=True,
+        )
+    except (WebAuthnException, TypeError, ValueError) as verification_error:
+        app.logger.info("WebAuthn registration rejected: %s", verification_error)
+        return jsonify({"success": False, "message": "Passkey registration verification failed."}), 400
+
+    try:
+        transport_list = credential.get("response", {}).get("transports", [])
+        transports = json.dumps(
+            [item for item in transport_list if isinstance(item, str)]
+            if isinstance(transport_list, list) else []
+        )
+        save_credential(
+            bytes_to_base64url(verification.credential_id),
+            user["id"],
+            verification.credential_public_key,
+            verification.sign_count,
+            transports,
+        )
+    except sqlite3.IntegrityError:
+        app.logger.exception("Could not store verified WebAuthn credential")
+        return jsonify({"success": False, "message": "Could not store this passkey."}), 409
+
+    return jsonify({"success": True, "message": "Passkey registered."})
+
+@app.route("/api/passkeys/authenticate/options", methods=["POST"])
+def passkey_authentication_options():
+    config, error, status = passkey_origin_allowed(request.headers.get("Origin", ""))
+    if error:
+        return jsonify({"success": False, "message": error}), status
+    rp_id, _ = config
+    options = generate_authentication_options(
+        rp_id=rp_id,
+        user_verification=UserVerificationRequirement.REQUIRED,
+    )
+    ceremony_id = secrets.token_urlsafe(32)
+    create_webauthn_challenge(
+        ceremony_id,
+        "authentication",
+        bytes_to_base64url(options.challenge),
+        None,
+        int(datetime.now().timestamp()) + WEBAUTHN_CHALLENGE_TTL_SECONDS,
+    )
+    return jsonify({
+        "success": True,
+        "ceremony_id": ceremony_id,
+        "options": json.loads(options_to_json(options)),
+    })
+
+@app.route("/api/passkeys/authenticate/verify", methods=["POST"])
+def verify_passkey_authentication():
+    config, error, status = passkey_origin_allowed(request.headers.get("Origin", ""))
+    if error:
+        return jsonify({"success": False, "message": error}), status
+    rp_id, expected_origin = config
+
+    data = request.get_json()
+    ceremony_id = data.get("ceremony_id") if isinstance(data, dict) else None
+    credential_response = data.get("credential") if isinstance(data, dict) else None
+    if (
+        not isinstance(ceremony_id, str)
+        or not isinstance(credential_response, dict)
+        or not isinstance(credential_response.get("id"), str)
+    ):
+        return jsonify({"success": False, "message": "Invalid passkey authentication response."}), 400
+
+    try:
+        credential_id = bytes_to_base64url(base64url_to_bytes(credential_response["id"]))
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "message": "Invalid passkey credential ID."}), 400
+
+    challenge_record = consume_webauthn_challenge(ceremony_id, "authentication")
+    if not challenge_record:
+        return jsonify({"success": False, "message": "Authentication challenge is invalid, expired, or already used."}), 400
+
+    stored_credential = get_credential(credential_id)
+    if not stored_credential:
+        return jsonify({"success": False, "message": "Passkey was not recognized."}), 401
+
+    try:
+        verification = verify_authentication_response(
+            credential=credential_response,
+            expected_challenge=base64url_to_bytes(challenge_record["challenge"]),
+            expected_rp_id=rp_id,
+            expected_origin=expected_origin,
+            credential_public_key=stored_credential["public_key"],
+            credential_current_sign_count=stored_credential["sign_count"],
+            require_user_verification=True,
+        )
+    except (WebAuthnException, TypeError, ValueError) as verification_error:
+        app.logger.info("WebAuthn authentication rejected: %s", verification_error)
+        return jsonify({"success": False, "message": "Passkey authentication verification failed."}), 401
+
+    user = get_user_by_id(stored_credential["user_id"])
+    if not user:
+        return jsonify({"success": False, "message": "Passkey account is no longer available."}), 401
+
+    update_credential_sign_count(credential_id, verification.new_sign_count)
+    update_last_login(user["email"])
+    user = get_user_by_email(user["email"])
+    session.clear()
+    session["user_email"] = user["email"]
+    session["user_fullname"] = user["fullname"]
+    session["logged_in_at"] = user["last_login"]
+    session["created_at"] = user["created_at"]
+    return jsonify({"success": True, "user": user})
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
     print(f"[*] Server OTP Login dang chay tai: http://localhost:{port}")
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(host="127.0.0.1", port=port, debug=False)

@@ -71,6 +71,11 @@
             <span class="btn-text" id="btnSendText">Gửi mã OTP đăng nhập</span>
             <div class="spinner hidden" id="spinnerSend"></div>
           </button>
+          <div class="passkey-separator">hoặc</div>
+          <div id="passkeyLoginAlert" class="alert-box hidden"></div>
+          <button type="button" id="btnPasskeyLogin" class="btn-secondary passkey-button">
+            Đăng nhập bằng Passkey
+          </button>
         </form>
 
         <div class="tab-toggle-footer">
@@ -168,6 +173,15 @@
               </div>
             </div>
           </div>
+        </div>
+
+        <div class="passkey-enrollment">
+          <h4>Passkeys</h4>
+          <p>Thêm passkey để đăng nhập nhanh chóng và chống giả mạo miền bằng Origin Binding.</p>
+          <div id="passkeyRegistrationAlert" class="alert-box hidden"></div>
+          <button type="button" id="btnRegisterPasskey" class="btn-secondary passkey-button">
+            Thêm passkey cho thiết bị này
+          </button>
         </div>
 
         <!-- DANH SÁCH TÀI KHOẢN ĐÃ LƯU TRONG HỆ THỐNG -->

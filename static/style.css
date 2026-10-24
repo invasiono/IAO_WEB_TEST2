@@ -545,6 +545,36 @@ body {
   color: #1e293b;
 }
 
+.passkey-separator {
+  margin: 14px 0 2px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.passkey-button {
+  margin-top: 8px;
+}
+
+.passkey-enrollment {
+  margin: 20px 0;
+  padding: 18px;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.passkey-enrollment h4 {
+  margin-bottom: 6px;
+  color: var(--text-dark);
+}
+
+.passkey-enrollment p {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 /* Spinner */
 .spinner {
   width: 18px;

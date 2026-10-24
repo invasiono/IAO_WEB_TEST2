@@ -93,7 +93,7 @@ document.addEventListener('DOMContentLoaded', () => {
       btnToggleMode.textContent = 'Tạo tài khoản mới';
     } else if (mode === 'register') {
       btnSendOtp.classList.remove('hidden');
-      btnDevLogin.classList.add('hidden');
+      btnDevLogin.classList.toggle('hidden', !devLoginEnabled);
       passkeySeparator.classList.add('hidden');
       btnPasskeyLogin.classList.add('hidden');
       groupFullname.classList.remove('hidden');
@@ -107,7 +107,7 @@ document.addEventListener('DOMContentLoaded', () => {
       btnToggleMode.textContent = 'Đăng nhập bằng Passkey';
     } else {
       btnSendOtp.classList.remove('hidden');
-      btnDevLogin.classList.add('hidden');
+      btnDevLogin.classList.toggle('hidden', !devLoginEnabled);
       passkeySeparator.classList.add('hidden');
       btnPasskeyLogin.classList.add('hidden');
       groupFullname.classList.add('hidden');
@@ -407,7 +407,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } finally {
       if (useDevOtp) {
         btnDevLogin.disabled = false;
-        btnDevLogin.textContent = 'Dev login · không gửi email';
+        btnDevLogin.textContent = 'Dev OTP · không gửi email';
       } else {
         setLoading(btnSendOtp, spinnerSend, false);
       }

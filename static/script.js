@@ -78,21 +78,22 @@ document.addEventListener('DOMContentLoaded', () => {
     tabRecover.classList.toggle('active', mode === 'recover');
 
     if (mode === 'login') {
-      btnSendOtp.classList.add('hidden');
-      btnDevLogin.classList.add('hidden');
-      passkeySeparator.classList.add('hidden');
+      btnSendOtp.classList.remove('hidden');
+      btnDevLogin.classList.toggle('hidden', !devLoginEnabled);
+      passkeySeparator.classList.toggle('hidden', !devLoginEnabled);
       btnPasskeyLogin.classList.remove('hidden');
       groupFullname.classList.add('hidden');
-      groupEmail.classList.add('hidden');
+      groupEmail.classList.remove('hidden');
       inputFullname.required = false;
-      formTitle.textContent = 'Đăng nhập bằng Passkey';
-      formSubtitle.textContent = 'Dùng passkey đã đăng ký trên thiết bị hoặc trình quản lý mật khẩu của bạn.';
-      emailTip.textContent = 'Đăng nhập chỉ hoàn tất sau khi máy chủ xác minh chữ ký passkey và Origin.';
+      formTitle.textContent = 'Đăng nhập';
+      formSubtitle.textContent = 'Đăng nhập bằng email hoặc passkey đã đăng ký trên thiết bị của bạn.';
+      btnSendText.textContent = 'Đăng nhập bằng OTP email';
+      emailTip.textContent = 'Mã OTP sẽ được gửi đến email của bạn để xác minh đăng nhập.';
       toggleQuestion.textContent = 'Chưa có tài khoản?';
       btnToggleMode.textContent = 'Tạo tài khoản mới';
     } else if (mode === 'register') {
       btnSendOtp.classList.remove('hidden');
-      btnDevLogin.classList.toggle('hidden', !devLoginEnabled);
+      btnDevLogin.classList.add('hidden');
       passkeySeparator.classList.add('hidden');
       btnPasskeyLogin.classList.add('hidden');
       groupFullname.classList.remove('hidden');
@@ -106,7 +107,7 @@ document.addEventListener('DOMContentLoaded', () => {
       btnToggleMode.textContent = 'Đăng nhập bằng Passkey';
     } else {
       btnSendOtp.classList.remove('hidden');
-      btnDevLogin.classList.toggle('hidden', !devLoginEnabled);
+      btnDevLogin.classList.add('hidden');
       passkeySeparator.classList.add('hidden');
       btnPasskeyLogin.classList.add('hidden');
       groupFullname.classList.add('hidden');
@@ -375,7 +376,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         otpActionBadge.textContent = currentMode === 'register'
           ? '✨ Xác minh email để tạo tài khoản'
-          : '🔐 Xác minh email để đăng ký lại passkey';
+          : currentMode === 'recover'
+            ? '🔐 Xác minh email để đăng ký lại passkey'
+            : '🔑 Xác minh OTP đăng nhập thử nghiệm';
 
         switchStep('otp');
         clearOtpInputs();
@@ -505,8 +508,12 @@ document.addEventListener('DOMContentLoaded', () => {
       if (res.ok && data.success) {
         clearInterval(expiryInterval);
         clearInterval(cooldownInterval);
-        const title = data.action === 'register' ? 'Hoàn tất bằng passkey' : 'Đăng ký passkey mới';
-        showDashboard(data.user, title, data.message, true);
+        if (data.action === 'login' && data.authenticated) {
+          showDashboard(data.user, 'Đăng nhập thử nghiệm thành công', data.message);
+        } else {
+          const title = data.action === 'register' ? 'Hoàn tất bằng passkey' : 'Đăng ký passkey mới';
+          showDashboard(data.user, title, data.message, true);
+        }
       } else {
         otpInputsContainer.classList.add('shake');
         setTimeout(() => otpInputsContainer.classList.remove('shake'), 500);

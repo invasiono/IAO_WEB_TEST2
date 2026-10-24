@@ -1,20 +1,20 @@
 # Passkey Authentication (WebAuthn / FIDO2)
 
-This Flask application uses WebAuthn passkeys as the only way to create an authenticated session. Email OTP is limited to verifying mailbox access before account creation or passkey recovery; verifying an OTP by itself never logs a user in.
+This Flask application uses WebAuthn passkeys for phishing-resistant authentication. In a team-restricted test deployment, OTP sign-in and Dev OTP can also be enabled temporarily for testing; those OTP modes are not phishing-resistant.
 
 ## Authentication flows
 
 - **New account:** enter a name and email, verify the emailed OTP, then create a passkey on this site's real origin. The account remains unauthenticated until the server verifies the WebAuthn registration response.
-- **Sign in:** use a discoverable passkey with user verification. The server creates an authenticated session only after validating the challenge, signature, exact origin, RP ID, and user-verification requirement.
+- **Sign in:** use a discoverable passkey with user verification or request an emailed OTP. When `DEV_LOGIN_ENABLED=true`, a Dev login button is also available to generate an OTP without sending email.
 - **Passkey recovery:** verify the account email, then register a replacement/additional passkey on the real site origin. This does not create an authenticated session until WebAuthn registration succeeds.
 
-The API rejects OTP sign-in requests. OTP is not cryptographically origin-bound and only starts a short-lived pending enrollment; it never creates an account or authenticated session by itself. Final authentication requires a successfully verified passkey ceremony. The HTTP `Origin` header check is an additional browser control, not cryptographic proof, because non-browser clients can forge it.
+OTP is not cryptographically origin-bound. Keep the app restricted to your team and disable OTP test mode before making the site public or using real user accounts. The HTTP `Origin` header check is an additional browser control, not cryptographic proof, because non-browser clients can forge it.
 
 ## Server configuration
 
 Configure SMTP credentials only in the server environment (local `.env` or your hosting provider's secret/environment settings). They are no longer accepted or changed through a public web form or API. Supported variables are listed in `.env.example`.
 
-The UI shows the version set in `APP_VERSION` (default `1.0.0`). For local testing only, set `DEV_LOGIN_ENABLED=true` while `WEBAUTHN_ORIGIN` is an HTTP localhost origin. This reveals a **Dev login** button that generates a short-lived OTP locally without sending email, fills it into the normal OTP form, and uses the same OTP verification path. The endpoint is additionally restricted to loopback clients, and remains unavailable for HTTPS production origins. It still only creates a pending passkey enrollment; a valid WebAuthn registration is required to sign in. Keep this setting `false` in production.
+The UI shows the version set in `APP_VERSION` (default `1.0.0`). Email OTP sign-in is available independently of `DEV_LOGIN_ENABLED`. Set `DEV_LOGIN_ENABLED=true` only for a private, team-restricted test deployment to show the additional **Dev login** button. Dev login generates a short-lived OTP on the server without sending email, fills it into the normal OTP form, and uses the same OTP verification endpoint. It can sign in to existing test accounts and bypasses mailbox ownership checks, so do not enable it on a public site or use it with real accounts. Set it to `false` before production use.
 
 Configure WebAuthn trust values on the server; never derive these from request headers or client input. For local development:
 

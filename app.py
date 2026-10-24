@@ -2,7 +2,6 @@ import os
 import sys
 import time
 import secrets
-import ipaddress
 import re
 import json
 import sqlite3
@@ -178,20 +177,10 @@ def is_dev_login_enabled():
     if os.getenv("DEV_LOGIN_ENABLED", "").strip().lower() != "true":
         return False
     try:
-        if not ipaddress.ip_address(request.remote_addr or "").is_loopback:
-            return False
+        get_webauthn_config()
     except ValueError:
         return False
-    try:
-        _, origin = get_webauthn_config()
-        parsed_origin = urlparse(origin)
-    except ValueError:
-        return False
-    return parsed_origin.scheme == "http" and parsed_origin.hostname in {
-        "localhost",
-        "127.0.0.1",
-        "::1",
-    }
+    return True
 
 @app.route("/")
 def index():
@@ -216,12 +205,11 @@ def send_otp():
     action = request.form.get("action", "").strip().lower()
     fullname = request.form.get("fullname", "").strip()
 
-    if action not in {"register", "recover"}:
+    if action not in {"register", "recover", "login"}:
         return jsonify({
             "success": False,
             "message": "Đăng nhập bằng OTP đã bị tắt. Hãy dùng passkey."
         }), 400
-
     if not email_raw:
         return jsonify({"success": False, "message": "Vui lòng nhập địa chỉ email!"}), 400
 
@@ -254,6 +242,12 @@ def send_otp():
                 "message": "Không tìm thấy tài khoản với email này."
             }), 400
         fullname = existing_user.get("fullname", "")
+    elif not existing_user:
+        return jsonify({
+            "success": False,
+            "not_found": True,
+            "message": "Không tìm thấy tài khoản với email này."
+        }), 400
 
     now = time.time()
     existing_otp = otp_storage.get(email)
@@ -305,12 +299,17 @@ def send_otp():
         "otp": otp_code,
         "action": action,
         "fullname": fullname,
+        "dev": False,
         "expires_at": now + OTP_EXPIRY_SECONDS,
         "attempts": 0,
         "last_sent": now
     }
 
-    action_label = "tạo tài khoản" if action == "register" else "khôi phục passkey"
+    action_label = {
+        "register": "tạo tài khoản",
+        "recover": "khôi phục passkey",
+        "login": "đăng nhập",
+    }[action]
     dest_desc = "hòm thư Gmail" if cfg["provider"] == "gmail" else "Mailtrap Sandbox"
     return jsonify({
         "success": True,
@@ -331,8 +330,8 @@ def send_dev_otp():
     email_raw = request.form.get("email", "").strip().lower()
     action = request.form.get("action", "").strip().lower()
     fullname = request.form.get("fullname", "").strip()
-    if action not in {"register", "recover"}:
-        return jsonify({"success": False, "message": "Dev OTP only supports registration or passkey recovery."}), 400
+    if action not in {"register", "recover", "login"}:
+        return jsonify({"success": False, "message": "Dev OTP only supports test account actions."}), 400
     if not email_raw:
         return jsonify({"success": False, "message": "Enter an email address."}), 400
     try:
@@ -347,9 +346,12 @@ def send_dev_otp():
         if existing_user:
             return jsonify({"success": False, "already_exists": True, "message": "This email already has an account."}), 400
     else:
-        if not existing_user:
+        if action == "recover" and not existing_user:
             return jsonify({"success": False, "not_found": True, "message": "No account was found for this email."}), 400
-        fullname = existing_user["fullname"]
+        if action == "login" and not existing_user:
+            return jsonify({"success": False, "not_found": True, "message": "No account was found for this email."}), 400
+        if existing_user:
+            fullname = existing_user["fullname"]
 
     now = time.time()
     existing_otp = otp_storage.get(email)
@@ -366,6 +368,7 @@ def send_dev_otp():
         "otp": otp_code,
         "action": action,
         "fullname": fullname,
+        "dev": True,
         "expires_at": now + OTP_EXPIRY_SECONDS,
         "attempts": 0,
         "last_sent": now,
@@ -445,6 +448,24 @@ def verify_otp():
         user = get_user_by_email(email)
         if not user:
             return jsonify({"success": False, "message": "Tài khoản không tồn tại."}), 400
+    elif action == "login":
+        user = get_user_by_email(email)
+        if not user:
+            return jsonify({"success": False, "message": "Tài khoản không tồn tại."}), 400
+        update_last_login(email)
+        user = get_user_by_email(email)
+        session.clear()
+        session["user_email"] = user["email"]
+        session["user_fullname"] = user["fullname"]
+        session["logged_in_at"] = user["last_login"]
+        session["created_at"] = user["created_at"]
+        return jsonify({
+            "success": True,
+            "authenticated": True,
+            "action": "login",
+            "message": "Đăng nhập bằng OTP thành công.",
+            "user": user,
+        })
     else:
         return jsonify({"success": False, "message": "Đăng nhập bằng OTP đã bị tắt. Hãy dùng passkey."}), 400
 

@@ -4,9 +4,9 @@ This Flask application uses WebAuthn passkeys for phishing-resistant authenticat
 
 ## Authentication flows
 
-- **New account:** enter a name and email, verify the emailed OTP, then create a passkey on this site's real origin. The account remains unauthenticated until the server verifies the WebAuthn registration response.
+- **New account:** enter a name and email, verify the emailed OTP (or use Dev OTP in a test deployment), then create a passkey on this site's real origin. The account remains unauthenticated until the server verifies the WebAuthn registration response.
 - **Sign in:** use a discoverable passkey with user verification or request an emailed OTP. When `DEV_LOGIN_ENABLED=true`, a Dev OTP button is also available without sending email.
-- **Passkey recovery:** verify the account email, then register a replacement/additional passkey on the real site origin. This does not create an authenticated session until WebAuthn registration succeeds.
+- **Passkey recovery:** verify the account email (or use Dev OTP in a test deployment), then register a replacement/additional passkey on the real site origin. This does not create an authenticated session until WebAuthn registration succeeds.
 
 OTP is not cryptographically origin-bound. Keep the app restricted to your team and disable OTP test mode before making the site public or using real user accounts. The HTTP `Origin` header check is an additional browser control, not cryptographic proof, because non-browser clients can forge it.
 

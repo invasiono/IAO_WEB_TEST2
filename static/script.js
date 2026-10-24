@@ -4,7 +4,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const stepDashboard = document.getElementById('stepDashboard');
   const tabLogin = document.getElementById('tabLogin');
   const tabRegister = document.getElementById('tabRegister');
-  const tabRecover = document.getElementById('tabRecover');
   const formTitle = document.getElementById('formTitle');
   const formSubtitle = document.getElementById('formSubtitle');
   const groupFullname = document.getElementById('groupFullname');
@@ -72,10 +71,9 @@ document.addEventListener('DOMContentLoaded', () => {
     currentMode = mode;
     hideAlert(emailAlert);
     hideAlert(passkeyLoginAlert);
-    [tabLogin, tabRegister, tabRecover].forEach(tab => tab.classList.remove('active'));
+    [tabLogin, tabRegister].forEach(tab => tab.classList.remove('active'));
     tabLogin.classList.toggle('active', mode === 'login');
     tabRegister.classList.toggle('active', mode === 'register');
-    tabRecover.classList.toggle('active', mode === 'recover');
 
     if (mode === 'login') {
       btnSendOtp.classList.remove('hidden');
@@ -105,26 +103,11 @@ document.addEventListener('DOMContentLoaded', () => {
       emailTip.textContent = 'OTP chỉ xác minh email. Nó không đăng nhập; chỉ passkey gắn với tên miền thật mới có thể hoàn tất.';
       toggleQuestion.textContent = 'Đã có tài khoản?';
       btnToggleMode.textContent = 'Đăng nhập bằng Passkey';
-    } else {
-      btnSendOtp.classList.remove('hidden');
-      btnDevLogin.classList.toggle('hidden', !devLoginEnabled);
-      passkeySeparator.classList.add('hidden');
-      btnPasskeyLogin.classList.add('hidden');
-      groupFullname.classList.add('hidden');
-      groupEmail.classList.remove('hidden');
-      inputFullname.required = false;
-      formTitle.textContent = 'Khôi phục quyền truy cập';
-      formSubtitle.textContent = 'Xác minh email rồi đăng ký passkey mới trên tên miền thật.';
-      btnSendText.textContent = 'Xác minh email để khôi phục';
-      emailTip.textContent = 'OTP không đăng nhập tài khoản. Một passkey mới phải được xác minh trên đúng tên miền.';
-      toggleQuestion.textContent = 'Quay lại đăng nhập?';
-      btnToggleMode.textContent = 'Đăng nhập bằng Passkey';
     }
   }
 
   tabLogin.addEventListener('click', () => setMode('login'));
   tabRegister.addEventListener('click', () => setMode('register'));
-  tabRecover.addEventListener('click', () => setMode('recover'));
   btnToggleMode.addEventListener('click', () => {
     setMode(currentMode === 'login' ? 'register' : 'login');
   });
@@ -376,9 +359,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         otpActionBadge.textContent = currentMode === 'register'
           ? '✨ Xác minh email để tạo tài khoản'
-          : currentMode === 'recover'
-            ? '🔐 Xác minh email để đăng ký lại passkey'
-            : '🔑 Xác minh OTP đăng nhập thử nghiệm';
+          : '🔑 Xác minh OTP đăng nhập thử nghiệm';
 
         switchStep('otp');
         clearOtpInputs();

@@ -205,7 +205,7 @@ def send_otp():
     action = request.form.get("action", "").strip().lower()
     fullname = request.form.get("fullname", "").strip()
 
-    if action not in {"register", "recover", "login"}:
+    if action not in {"register", "login"}:
         return jsonify({
             "success": False,
             "message": "Đăng nhập bằng OTP đã bị tắt. Hãy dùng passkey."
@@ -234,14 +234,6 @@ def send_otp():
                 "already_exists": True,
                 "message": f"Tài khoản với email '{email}' đã tồn tại trong hệ thống! Những tài khoản đã tạo rồi thì không thể tạo lại. Vui lòng chuyển qua tab Đăng nhập."
             }), 400
-    elif action == "recover":
-        if not existing_user:
-            return jsonify({
-                "success": False,
-                "not_found": True,
-                "message": "Không tìm thấy tài khoản với email này."
-            }), 400
-        fullname = existing_user.get("fullname", "")
     elif not existing_user:
         return jsonify({
             "success": False,
@@ -307,7 +299,6 @@ def send_otp():
 
     action_label = {
         "register": "tạo tài khoản",
-        "recover": "khôi phục passkey",
         "login": "đăng nhập",
     }[action]
     dest_desc = "hòm thư Gmail" if cfg["provider"] == "gmail" else "Mailtrap Sandbox"
@@ -330,7 +321,7 @@ def send_dev_otp():
     email_raw = request.form.get("email", "").strip().lower()
     action = request.form.get("action", "").strip().lower()
     fullname = request.form.get("fullname", "").strip()
-    if action not in {"register", "recover", "login"}:
+    if action not in {"register", "login"}:
         return jsonify({"success": False, "message": "Dev OTP only supports test account actions."}), 400
     if not email_raw:
         return jsonify({"success": False, "message": "Enter an email address."}), 400
@@ -346,8 +337,6 @@ def send_dev_otp():
         if existing_user:
             return jsonify({"success": False, "already_exists": True, "message": "This email already has an account."}), 400
     else:
-        if action == "recover" and not existing_user:
-            return jsonify({"success": False, "not_found": True, "message": "No account was found for this email."}), 400
         if action == "login" and not existing_user:
             return jsonify({"success": False, "not_found": True, "message": "No account was found for this email."}), 400
         if existing_user:
@@ -444,10 +433,6 @@ def verify_otp():
             "created_at": "Chưa tạo",
             "last_login": "Chưa đăng nhập",
         }
-    elif action == "recover":
-        user = get_user_by_email(email)
-        if not user:
-            return jsonify({"success": False, "message": "Tài khoản không tồn tại."}), 400
     elif action == "login":
         user = get_user_by_email(email)
         if not user:

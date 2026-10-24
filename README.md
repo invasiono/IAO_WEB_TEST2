@@ -6,15 +6,13 @@ This Flask application uses WebAuthn passkeys for phishing-resistant authenticat
 
 - **New account:** enter a name and email, verify the emailed OTP (or use Dev OTP in a test deployment), then create a passkey on this site's real origin. The account remains unauthenticated until the server verifies the WebAuthn registration response.
 - **Sign in:** use a discoverable passkey with user verification or request an emailed OTP. When `DEV_LOGIN_ENABLED=true`, a Dev OTP button is also available without sending email.
-- **Passkey recovery:** verify the account email (or use Dev OTP in a test deployment), then register a replacement/additional passkey on the real site origin. This does not create an authenticated session until WebAuthn registration succeeds.
-
 OTP is not cryptographically origin-bound. Keep the app restricted to your team and disable OTP test mode before making the site public or using real user accounts. The HTTP `Origin` header check is an additional browser control, not cryptographic proof, because non-browser clients can forge it.
 
 ## Server configuration
 
 Configure SMTP credentials only in the server environment (local `.env` or your hosting provider's secret/environment settings). They are no longer accepted or changed through a public web form or API. Supported variables are listed in `.env.example`.
 
-The UI shows the version set in `APP_VERSION` (default `1.0.0`). Email OTP sign-in is available independently of `DEV_LOGIN_ENABLED`. Set `DEV_LOGIN_ENABLED=true` only for a private, team-restricted test deployment to show the additional **Dev OTP** button on the login, registration, and recovery screens. Dev OTP generates a short-lived OTP on the server without sending email, fills it into the normal OTP form, and uses the same OTP verification endpoint. It bypasses mailbox ownership checks for all three actions, so do not enable it on a public site or use it with real accounts. Set it to `false` before production use.
+The UI shows the version set in `APP_VERSION` (default `1.0.0`). Email OTP sign-in is available independently of `DEV_LOGIN_ENABLED`. Set `DEV_LOGIN_ENABLED=true` only for a private, team-restricted test deployment to show the additional **Dev OTP** button on the login and registration screens. Dev OTP generates a short-lived OTP on the server without sending email, fills it into the normal OTP form, and uses the same OTP verification endpoint. It bypasses mailbox ownership checks for both actions, so do not enable it on a public site or use it with real accounts. Set it to `false` before production use.
 
 Configure WebAuthn trust values on the server; never derive these from request headers or client input. For local development:
 

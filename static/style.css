@@ -22,6 +22,10 @@
   font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
+.hidden {
+  display: none !important;
+}
+
 body {
   min-height: 100vh;
   background-color: #0b0f19;

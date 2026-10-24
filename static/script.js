@@ -24,6 +24,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const passkeyRegistrationAlert = document.getElementById('passkeyRegistrationAlert');
   const otpActionBadge = document.getElementById('otpActionBadge');
   const formVerifyOtp = document.getElementById('formVerifyOtp');
+  const otpEmailField = document.getElementById('otpEmailField');
+  const otpValueField = document.getElementById('otpValueField');
   const displayEmail = document.getElementById('displayEmail');
   const btnChangeEmail = document.getElementById('btnChangeEmail');
   const otpInputs = document.querySelectorAll('.otp-digit');
@@ -368,14 +370,13 @@ document.addEventListener('DOMContentLoaded', () => {
     setLoading(btnSendOtp, spinnerSend, true);
 
     try {
+      const formData = new FormData(formSendOtp);
+      formData.set('email', email);
+      formData.set('action', currentMode);
+      formData.set('fullname', fullname);
       const res = await fetch('/api/send-otp', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email,
-          action: currentMode,
-          fullname
-        })
+        body: formData
       });
 
       const data = await res.json();
@@ -494,10 +495,12 @@ document.addEventListener('DOMContentLoaded', () => {
     setLoading(btnVerifyOtp, spinnerVerify, true);
 
     try {
+      otpEmailField.value = currentEmail;
+      otpValueField.value = otp;
+      const formData = new FormData(formVerifyOtp);
       const res = await fetch('/api/verify-otp', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: currentEmail, otp })
+        body: formData
       });
 
       const data = await res.json();
@@ -526,14 +529,13 @@ document.addEventListener('DOMContentLoaded', () => {
     btnResendOtp.textContent = 'Đang gửi...';
 
     try {
+      const formData = new FormData(formSendOtp);
+      formData.set('email', currentEmail);
+      formData.set('action', currentMode);
+      formData.set('fullname', currentFullname);
       const res = await fetch('/api/send-otp', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: currentEmail,
-          action: currentMode,
-          fullname: currentFullname
-        })
+        body: formData
       });
 
       const data = await res.json();

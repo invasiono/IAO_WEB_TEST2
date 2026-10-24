@@ -256,10 +256,11 @@ def update_config():
 
 @app.route("/api/send-otp", methods=["POST"])
 def send_otp():
-    data = request.get_json() or {}
-    email_raw = data.get("email", "").strip().lower()
-    action = data.get("action", "login").strip().lower()
-    fullname = data.get("fullname", "").strip()
+    if request.mimetype not in {"multipart/form-data", "application/x-www-form-urlencoded"}:
+        return jsonify({"success": False, "message": "Expected form data."}), 400
+    email_raw = request.form.get("email", "").strip().lower()
+    action = request.form.get("action", "login").strip().lower()
+    fullname = request.form.get("fullname", "").strip()
 
     if not email_raw:
         return jsonify({"success": False, "message": "Vui lòng nhập địa chỉ email!"}), 400
@@ -363,9 +364,10 @@ def send_otp():
 
 @app.route("/api/verify-otp", methods=["POST"])
 def verify_otp():
-    data = request.get_json() or {}
-    email = data.get("email", "").strip().lower()
-    user_otp = data.get("otp", "").strip()
+    if request.mimetype not in {"multipart/form-data", "application/x-www-form-urlencoded"}:
+        return jsonify({"success": False, "message": "Expected form data."}), 400
+    email = request.form.get("email", "").strip().lower()
+    user_otp = request.form.get("otp", "").strip()
 
     if not email or not user_otp:
         return jsonify({"success": False, "message": "Vui lòng nhập đầy đủ Email và Mã OTP!"}), 400

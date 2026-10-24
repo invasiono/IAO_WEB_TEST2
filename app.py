@@ -120,6 +120,13 @@ def passkey_origin_allowed(origin):
         return None, "Request Origin does not match the configured WebAuthn origin.", 403
     return (rp_id, expected_origin), None, None
 
+@app.before_request
+def enforce_api_origin():
+    if request.path.startswith("/api/") and request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        _, error, status = passkey_origin_allowed(request.headers.get("Origin", ""))
+        if error:
+            return jsonify({"success": False, "message": error}), status
+
 @app.after_request
 def disable_passkey_response_caching(response):
     if request.path.startswith("/api/passkeys/"):

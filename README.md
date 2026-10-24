@@ -81,7 +81,7 @@ Passkeys are available alongside email OTP. Users first create an account or sig
 
 ### Configure the relying party
 
-Set both values in the server's `.env` (or deployment environment). They are server-side trust settings and must never come from a request `Host` header or client input:
+Set both values in the server's `.env` (or deployment environment). They are server-side trust settings and must never come from a request `Host` header or client input. `localhost` is only for local development. On Render, set `WEBAUTHN_ORIGIN` to the exact public service origin (for example, `https://your-service.onrender.com`) and `WEBAUTHN_RP_ID` to its hostname (for example, `your-service.onrender.com`):
 
 ```env
 WEBAUTHN_ORIGIN=http://localhost:5000
@@ -89,7 +89,9 @@ WEBAUTHN_RP_ID=localhost
 
 ```
 
-`WEBAUTHN_ORIGIN` is the exact browser origin: scheme, host, and any non-default port, with no trailing slash or path. `WEBAUTHN_RP_ID` is set to exactly that origin's hostname in this implementation (not a parent domain). The app rejects missing or mismatched configuration, rejects a different HTTP `Origin` header, and asks the WebAuthn verifier to validate both this exact origin and RP ID against the signed client data and authenticator data. This combination prevents a lookalike/reverse-proxy domain from completing an assertion for this site. Do not expose the site behind an untrusted reverse proxy; configure the canonical public origin explicitly.
+`WEBAUTHN_ORIGIN` is the exact browser origin: scheme, host, and any non-default port, with no trailing slash or path. `WEBAUTHN_RP_ID` is set to exactly that origin's hostname in this implementation (not a parent domain). The app rejects missing or mismatched configuration and rejects a different or missing HTTP `Origin` header on every API mutation. WebAuthn verification additionally validates this exact origin and RP ID against the signed client data and authenticator data. This makes a normal reverse proxy that serves the page under its own hostname fail at the API Origin check, and the passkey signature is independently bound to the authenticator's browser origin. Do not expose the site behind an untrusted reverse proxy; configure the canonical public origin explicitly.
+
+The existing email OTP flow is not cryptographically origin-bound. The HTTP `Origin` check blocks ordinary browser-based proxy sites, but a proxy operator capable of rewriting request headers can relay or steal OTPs. For strong AiTM resistance, use passkeys as the only authentication method and do not offer OTP as a login/recovery fallback.
 
 Generate a private session key and set it as `SECRET_KEY` (the app refuses to start with a short/default key when configured for production HTTPS):
 

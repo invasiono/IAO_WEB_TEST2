@@ -11,7 +11,6 @@ def verify_email_real_existence(email: str) -> tuple[bool, str, str]:
     - Kiểm tra bản ghi DNS MX (Mail Exchange) của tên miền có hoạt động và nhận thư không
     """
     try:
-        # check_deliverability=True sẽ truy vấn bản ghi DNS MX của tên miền email
         validation = validate_email(email.strip(), check_deliverability=True)
         normalized_email = validation.normalized
         return True, "Email hợp lệ và máy chủ nhận thư tồn tại.", normalized_email
@@ -165,11 +164,11 @@ def send_otp_via_smtp(
     recipient_email: str,
     otp_code: str,
     gmail_user: str,
-    gmail_password: str,
+    sensitive_gmail_password: str,
     mailtrap_host: str,
     mailtrap_port: int,
     mailtrap_user: str,
-    mailtrap_pass: str,
+    sensitive_mailtrap_password: str,
     action: str = "login",
     fullname: str = ""
 ) -> tuple[bool, str]:
@@ -188,21 +187,18 @@ def send_otp_via_smtp(
     msg.attach(MIMEText(html_content, "html", "utf-8"))
 
     if provider == "gmail":
-        # GỬI QUA GMAIL SMTP
-        if not gmail_user or not gmail_password or gmail_user == "your_email@gmail.com" or gmail_password == "your_gmail_app_password":
+        if not gmail_user or not sensitive_gmail_password or gmail_user == "your_email@gmail.com" or sensitive_gmail_password == "your_gmail_app_password":
             return False, "Chưa cấu hình tài khoản Gmail! Vui lòng bấm vào 'Cấu hình Email' để nhập địa chỉ Gmail và Mật khẩu ứng dụng (App Password)."
 
         msg["From"] = f"SecureOTP Service <{gmail_user}>"
 
         try:
-            # Kết nối Gmail SMTP port 587 với STARTTLS
             server = smtplib.SMTP("smtp.gmail.com", 587, timeout=20)
             server.ehlo()
             server.starttls()
             server.ehlo()
-            # Xóa khoảng trắng nếu user dán 'xxxx xxxx xxxx xxxx'
-            clean_pass = gmail_password.replace(" ", "").strip()
-            server.login(gmail_user.strip(), clean_pass)
+            normalized_gmail_password = sensitive_gmail_password.replace(" ", "").strip()
+            server.login(gmail_user.strip(), normalized_gmail_password)
             server.sendmail(gmail_user.strip(), [recipient_email], msg.as_string())
             server.quit()
             return True, f"Mã OTP đã được gửi thật vào hòm thư Gmail của bạn ({recipient_email})!"
@@ -212,8 +208,7 @@ def send_otp_via_smtp(
             return False, f"Lỗi khi gửi qua Gmail SMTP: {str(e)}"
 
     else:
-        # GỬI QUA MAILTRAP SANDBOX
-        if not mailtrap_user or not mailtrap_pass or mailtrap_user == "your_mailtrap_username_here":
+        if not mailtrap_user or not sensitive_mailtrap_password or mailtrap_user == "your_mailtrap_username_here":
             return False, "Chưa cấu hình tài khoản Mailtrap! Vui lòng bấm vào 'Cấu hình Email' để nhập Mailtrap Credentials."
 
         msg["From"] = f"SecureOTP Service <noreply@mailtrap-demo.com>"
@@ -226,7 +221,7 @@ def send_otp_via_smtp(
                 server.ehlo()
             except Exception:
                 pass
-            server.login(mailtrap_user, mailtrap_pass)
+            server.login(mailtrap_user, sensitive_mailtrap_password)
             server.sendmail("noreply@mailtrap-demo.com", [recipient_email], msg.as_string())
             server.quit()
             return True, f"Mã OTP đã được gửi vào hòm thư Mailtrap Sandbox!"

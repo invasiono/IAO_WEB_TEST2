@@ -173,5 +173,4 @@ def update_credential_sign_count(credential_id: str, sign_count: int):
         )
         conn.commit()
 
-# Khởi tạo bảng khi import
 init_db()

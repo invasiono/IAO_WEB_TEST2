@@ -10,12 +10,12 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <!-- Background Glow Effects -->
+
   <div class="bg-shape shape-1"></div>
   <div class="bg-shape shape-2"></div>
   <div class="bg-shape shape-3"></div>
 
-  <!-- Top Navigation Bar -->
+
   <header class="top-nav">
     <div class="logo-area">
       <div class="logo-icon">📧</div>
@@ -29,9 +29,9 @@
   <main class="main-container">
     <div class="auth-card">
 
-      <!-- STEP 1: CHỌN TAB ĐĂNG NHẬP HOẶC TẠO TÀI KHOẢN -->
+
       <section id="stepEmail" class="auth-step active">
-        <!-- Auth Tabs Switcher -->
+
         <div class="auth-tabs">
           <button type="button" id="tabLogin" class="tab-btn active">Đăng Nhập</button>
           <button type="button" id="tabRegister" class="tab-btn">Tạo Tài Khoản Mới</button>
@@ -46,7 +46,7 @@
         </div>
 
         <form id="formSendOtp" class="auth-form" onsubmit="return false;">
-          <!-- Field Họ và Tên (chỉ hiện khi Đăng Ký) -->
+
           <div class="form-group hidden" id="groupFullname">
             <label for="inputFullname">Họ và Tên</label>
             <div class="input-wrapper">
@@ -55,7 +55,7 @@
             </div>
           </div>
 
-          <!-- Field Email -->
+
           <div class="form-group">
             <label for="inputEmail">Địa chỉ Email thực tế</label>
             <div class="input-wrapper">
@@ -92,7 +92,7 @@
         </div>
       </section>
 
-      <!-- STEP 2: NHẬP MÃ OTP -->
+
       <section id="stepOtp" class="auth-step">
         <div class="card-header">
           <div class="action-mode-badge" id="otpActionBadge">
@@ -148,7 +148,7 @@
         </div>
       </section>
 
-      <!-- STEP 3: DASHBOARD KHI ĐĂNG NHẬP / TẠO TÀI KHOẢN THÀNH CÔNG -->
+
       <section id="stepDashboard" class="auth-step">
         <div class="dashboard-header">
           <div class="success-badge">
@@ -191,16 +191,16 @@
           </form>
         </div>
 
-        <!-- DANH SÁCH TÀI KHOẢN ĐÃ LƯU TRONG HỆ THỐNG -->
+
         <div class="saved-accounts-section">
           <div class="section-title-row">
             <h4>📁 Tài khoản đã lưu trong hệ thống (<span id="countUsers">0</span>)</h4>
             <button type="button" id="btnRefreshUsers" class="btn-mini-refresh" title="Làm mới danh sách">↻ Cập nhật</button>
           </div>
           <p class="section-subtext">Dữ liệu được lưu vĩnh viễn trong SQLite. Những tài khoản này đã được tạo và không thể đăng ký lại trùng email.</p>
-          
+
           <div class="users-list" id="usersList">
-            <!-- Render danh sách tài khoản bằng JS -->
+
           </div>
         </div>
 
@@ -213,7 +213,7 @@
     </div>
   </main>
 
-  <!-- MODAL CẤU HÌNH EMAIL (GMAIL SMTP / MAILTRAP) -->
+
   <div id="modalConfig" class="modal-overlay hidden">
     <div class="modal-content">
       <div class="modal-header">
@@ -225,7 +225,7 @@
       </div>
 
       <div class="modal-body">
-        <!-- Switcher giữa Gmail và Mailtrap -->
+
         <div class="provider-tabs">
           <button type="button" id="tabProviderGmail" class="provider-tab-btn active">
             📮 Gửi qua Gmail (Thực tế)
@@ -235,7 +235,7 @@
           </button>
         </div>
 
-        <!-- PANEL CẤU HÌNH GMAIL -->
+
         <div id="panelGmail" class="provider-panel active">
           <div class="info-guide">
             <strong>Cách thiết lập Gmail để gửi OTP thật:</strong>
@@ -270,7 +270,7 @@
           </form>
         </div>
 
-        <!-- PANEL CẤU HÌNH MAILTRAP -->
+
         <div id="panelMailtrap" class="provider-panel">
           <div class="info-guide">
             <strong>Thông tin Mailtrap Sandboxes:</strong>

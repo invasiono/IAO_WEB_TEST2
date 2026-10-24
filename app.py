@@ -47,7 +47,6 @@ if hasattr(sys.stdout, "reconfigure"):
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
-# Load environment variables
 env_path = Path(__file__).parent / ".env"
 if not env_path.exists():
     example_path = Path(__file__).parent / ".env.example"
@@ -75,11 +74,10 @@ app.config.update(
     SESSION_COOKIE_SECURE=os.getenv("WEBAUTHN_ORIGIN", "").strip().lower().startswith("https://"),
 )
 
-# In-memory store for OTPs
 otp_storage = {}
 
-OTP_EXPIRY_SECONDS = 300  # 5 phút
-RESEND_COOLDOWN_SECONDS = 45  # 45 giây trước khi được yêu cầu gửi lại
+OTP_EXPIRY_SECONDS = 300
+RESEND_COOLDOWN_SECONDS = 45
 MAX_ATTEMPTS = 5
 WEBAUTHN_CHALLENGE_TTL_SECONDS = 300
 
@@ -150,21 +148,21 @@ def get_smtp_config():
     return {
         "provider": provider,
         "gmail_user": os.getenv("GMAIL_USER", "").strip(),
-        "gmail_password": os.getenv("GMAIL_APP_PASSWORD", "").strip(),
+        "sensitive_gmail_password": os.getenv("GMAIL_APP_PASSWORD", "").strip(),
         "mailtrap_host": os.getenv("MAILTRAP_HOST", "sandbox.smtp.mailtrap.io").strip(),
         "mailtrap_port": int(os.getenv("MAILTRAP_PORT", "2525")),
         "mailtrap_user": os.getenv("MAILTRAP_USERNAME", "").strip(),
-        "mailtrap_pass": os.getenv("MAILTRAP_PASSWORD", "").strip()
+        "sensitive_mailtrap_password": os.getenv("MAILTRAP_PASSWORD", "").strip()
     }
 
 def is_provider_ready():
     cfg = get_smtp_config()
     if cfg["provider"] == "gmail":
         return bool(cfg["gmail_user"] and cfg["gmail_user"] != "your_email@gmail.com" and
-                    cfg["gmail_password"] and cfg["gmail_password"] != "your_gmail_app_password")
+                    cfg["sensitive_gmail_password"] and cfg["sensitive_gmail_password"] != "your_gmail_app_password")
     else:
         return bool(cfg["mailtrap_user"] and cfg["mailtrap_user"] != "your_mailtrap_username_here" and
-                    cfg["mailtrap_pass"] and cfg["mailtrap_pass"] != "your_mailtrap_password_here")
+                    cfg["sensitive_mailtrap_password"] and cfg["sensitive_mailtrap_password"] != "your_mailtrap_password_here")
 
 @app.route("/")
 def index():
@@ -200,8 +198,8 @@ def get_config_status():
 
 @app.route("/api/config", methods=["POST"])
 def update_config():
-    data = request.get_json() or {}
-    provider = data.get("provider", "gmail").strip().lower()
+    submitted_config = request.get_json() or {}
+    provider = submitted_config.get("provider", "gmail").strip().lower()
 
     os.environ["SMTP_PROVIDER"] = provider
     try:
@@ -210,18 +208,18 @@ def update_config():
         pass
 
     if provider == "gmail":
-        gmail_user = data.get("gmail_user", "").strip()
-        gmail_password = data.get("gmail_password", "").strip()
+        gmail_user = submitted_config.get("gmail_user", "").strip()
+        sensitive_gmail_password = submitted_config.get("gmail_password", "").strip()
 
-        if not gmail_user or not gmail_password:
+        if not gmail_user or not sensitive_gmail_password:
             return jsonify({"success": False, "message": "Vui lòng nhập đầy đủ Email Gmail và Mật khẩu ứng dụng (App Password)!"}), 400
 
         os.environ["GMAIL_USER"] = gmail_user
-        os.environ["GMAIL_APP_PASSWORD"] = gmail_password
+        os.environ["GMAIL_APP_PASSWORD"] = sensitive_gmail_password
 
         try:
             set_key(str(env_path), "GMAIL_USER", gmail_user)
-            set_key(str(env_path), "GMAIL_APP_PASSWORD", gmail_password)
+            set_key(str(env_path), "GMAIL_APP_PASSWORD", sensitive_gmail_password)
         except Exception as e:
             print("Không thể ghi file .env:", e)
 
@@ -230,22 +228,22 @@ def update_config():
             "message": f"Đã lưu cấu hình Gmail ({gmail_user}) thành công! OTP sẽ được gửi thật qua Gmail."
         })
     else:
-        mailtrap_user = data.get("mailtrap_user", "").strip()
-        mailtrap_pass = data.get("mailtrap_pass", "").strip()
-        host = data.get("mailtrap_host", "sandbox.smtp.mailtrap.io").strip()
-        port = str(data.get("mailtrap_port", "2525")).strip()
+        mailtrap_user = submitted_config.get("mailtrap_user", "").strip()
+        sensitive_mailtrap_password = submitted_config.get("mailtrap_pass", "").strip()
+        host = submitted_config.get("mailtrap_host", "sandbox.smtp.mailtrap.io").strip()
+        port = str(submitted_config.get("mailtrap_port", "2525")).strip()
 
-        if not mailtrap_user or not mailtrap_pass:
+        if not mailtrap_user or not sensitive_mailtrap_password:
             return jsonify({"success": False, "message": "Vui lòng nhập đầy đủ Username và Password của Mailtrap!"}), 400
 
         os.environ["MAILTRAP_USERNAME"] = mailtrap_user
-        os.environ["MAILTRAP_PASSWORD"] = mailtrap_pass
+        os.environ["MAILTRAP_PASSWORD"] = sensitive_mailtrap_password
         os.environ["MAILTRAP_HOST"] = host
         os.environ["MAILTRAP_PORT"] = port
 
         try:
             set_key(str(env_path), "MAILTRAP_USERNAME", mailtrap_user)
-            set_key(str(env_path), "MAILTRAP_PASSWORD", mailtrap_pass)
+            set_key(str(env_path), "MAILTRAP_PASSWORD", sensitive_mailtrap_password)
             set_key(str(env_path), "MAILTRAP_HOST", host)
             set_key(str(env_path), "MAILTRAP_PORT", port)
         except Exception as e:
@@ -266,7 +264,6 @@ def send_otp():
     if not email_raw:
         return jsonify({"success": False, "message": "Vui lòng nhập địa chỉ email!"}), 400
 
-    # 1. XÁC THỰC XEM EMAIL CÓ THỰC SỰ TỒN TẠI KHÔNG (DNS MX CHECK & RFC COMPLIANCE)
     is_real, reason, normalized_email = verify_email_real_existence(email_raw)
     if not is_real:
         return jsonify({
@@ -277,14 +274,12 @@ def send_otp():
 
     email = normalized_email
 
-    # 2. KIỂM TRA ĐIỀU KIỆN TÀI KHOẢN TRONG DATABASE
     existing_user = get_user_by_email(email)
 
     if action == "register":
         if not fullname:
             return jsonify({"success": False, "message": "Vui lòng nhập đầy đủ Họ và tên để tạo tài khoản!"}), 400
 
-        # Nếu đã tồn tại tài khoản thì KHÔNG cho tạo lại
         if existing_user:
             return jsonify({
                 "success": False,
@@ -292,7 +287,6 @@ def send_otp():
                 "message": f"Tài khoản với email '{email}' đã tồn tại trong hệ thống! Những tài khoản đã tạo rồi thì không thể tạo lại. Vui lòng chuyển qua tab Đăng nhập."
             }), 400
     else:
-        # Nếu đăng nhập nhưng tài khoản chưa tồn tại
         if not existing_user:
             return jsonify({
                 "success": False,
@@ -304,7 +298,6 @@ def send_otp():
     now = time.time()
     existing_otp = otp_storage.get(email)
 
-    # Kiểm tra cooldown gửi lại
     if existing_otp:
         time_since_last_send = now - existing_otp.get("last_sent", 0)
         if time_since_last_send < RESEND_COOLDOWN_SECONDS:
@@ -315,7 +308,6 @@ def send_otp():
                 "cooldown": wait_time
             }), 429
 
-    # 3. KIỂM TRA CẤU HÌNH GỬI EMAIL (GMAIL HOẶC MAILTRAP)
     cfg = get_smtp_config()
     if not is_provider_ready():
         prov_name = "Gmail" if cfg["provider"] == "gmail" else "Mailtrap"
@@ -326,20 +318,18 @@ def send_otp():
             "message": f"Chưa cấu hình tài khoản {prov_name}! Vui lòng bấm vào nút 'Cấu hình Email' để điền thông tin gửi mail."
         }), 400
 
-    # 4. TẠO MÃ OTP 6 SỐ NGẪU NHIÊN BẢO MẬT
     otp_code = str(secrets.randbelow(900000) + 100000)
 
-    # 5. GỬI MÃ QUA SMTP
     success, mail_message = send_otp_via_smtp(
         provider=cfg["provider"],
         recipient_email=email,
         otp_code=otp_code,
         gmail_user=cfg["gmail_user"],
-        gmail_password=cfg["gmail_password"],
+        sensitive_gmail_password=cfg["sensitive_gmail_password"],
         mailtrap_host=cfg["mailtrap_host"],
         mailtrap_port=cfg["mailtrap_port"],
         mailtrap_user=cfg["mailtrap_user"],
-        mailtrap_pass=cfg["mailtrap_pass"],
+        sensitive_mailtrap_password=cfg["sensitive_mailtrap_password"],
         action=action,
         fullname=fullname
     )
@@ -351,7 +341,6 @@ def send_otp():
             "needs_config": "Chưa cấu hình" in mail_message or "Lỗi xác thực" in mail_message
         }), 400
 
-    # Lưu OTP vào bộ nhớ
     otp_storage[email] = {
         "otp": otp_code,
         "action": action,

@@ -1,10 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
-  // Elements - Steps
   const stepEmail = document.getElementById('stepEmail');
   const stepOtp = document.getElementById('stepOtp');
   const stepDashboard = document.getElementById('stepDashboard');
-
-  // Elements - Tabs & Mode
   const tabLogin = document.getElementById('tabLogin');
   const tabRegister = document.getElementById('tabRegister');
   const formTitle = document.getElementById('formTitle');
@@ -16,8 +13,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnSendText = document.getElementById('btnSendText');
   const btnToggleMode = document.getElementById('btnToggleMode');
   const toggleQuestion = document.getElementById('toggleQuestion');
-
-  // Form 1: Send OTP
   const formSendOtp = document.getElementById('formSendOtp');
   const btnSendOtp = document.getElementById('btnSendOtp');
   const spinnerSend = document.getElementById('spinnerSend');
@@ -27,8 +22,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const formPasskeyRegistration = document.getElementById('formPasskeyRegistration');
   const btnRegisterPasskey = document.getElementById('btnRegisterPasskey');
   const passkeyRegistrationAlert = document.getElementById('passkeyRegistrationAlert');
-
-  // Form 2: OTP
   const otpActionBadge = document.getElementById('otpActionBadge');
   const formVerifyOtp = document.getElementById('formVerifyOtp');
   const displayEmail = document.getElementById('displayEmail');
@@ -43,8 +36,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const resendCooldown = document.getElementById('resendCooldown');
   const checkMailboxHint = document.getElementById('checkMailboxHint');
   const linkOpenMailbox = document.getElementById('linkOpenMailbox');
-
-  // Dashboard
   const dashGreetingTitle = document.getElementById('dashGreetingTitle');
   const dashGreetingSubtitle = document.getElementById('dashGreetingSubtitle');
   const dashUserName = document.getElementById('dashUserName');
@@ -56,8 +47,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const usersList = document.getElementById('usersList');
   const countUsers = document.getElementById('countUsers');
   const btnRefreshUsers = document.getElementById('btnRefreshUsers');
-
-  // Config Modal & Top Nav
   const btnConfigModal = document.getElementById('btnConfigModal');
   const modalConfig = document.getElementById('modalConfig');
   const btnCloseModal = document.getElementById('btnCloseModal');
@@ -67,44 +56,32 @@ document.addEventListener('DOMContentLoaded', () => {
   const navProviderBadge = document.getElementById('navProviderBadge');
   const openWebmailText = document.getElementById('openWebmailText');
   const btnOpenWebmail = document.getElementById('btnOpenWebmail');
-
-  // Modal Provider Tabs
   const tabProviderGmail = document.getElementById('tabProviderGmail');
   const tabProviderMailtrap = document.getElementById('tabProviderMailtrap');
   const panelGmail = document.getElementById('panelGmail');
   const panelMailtrap = document.getElementById('panelMailtrap');
-
-  // Gmail form elements
   const formConfigGmail = document.getElementById('formConfigGmail');
   const cfgGmailUser = document.getElementById('cfgGmailUser');
-  const cfgGmailPassword = document.getElementById('cfgGmailPassword');
+  const sensitiveGmailPasswordInput = document.getElementById('cfgGmailPassword');
   const btnSaveGmail = document.getElementById('btnSaveGmail');
   const spinnerGmail = document.getElementById('spinnerGmail');
   const modalAlertGmail = document.getElementById('modalAlertGmail');
-
-  // Mailtrap form elements
   const formConfigMailtrap = document.getElementById('formConfigMailtrap');
   const cfgMailtrapHost = document.getElementById('cfgMailtrapHost');
   const cfgMailtrapPort = document.getElementById('cfgMailtrapPort');
   const cfgMailtrapUser = document.getElementById('cfgMailtrapUser');
-  const cfgMailtrapPass = document.getElementById('cfgMailtrapPass');
+  const sensitiveMailtrapPasswordInput = document.getElementById('cfgMailtrapPass');
   const btnSaveMailtrap = document.getElementById('btnSaveMailtrap');
   const spinnerMailtrap = document.getElementById('spinnerMailtrap');
   const modalAlertMailtrap = document.getElementById('modalAlertMailtrap');
-
-  // State
-  let currentMode = 'login'; // 'login' or 'register'
+  let currentMode = 'login';
   let currentProvider = 'gmail';
   let currentEmail = '';
   let currentFullname = '';
   let expiryInterval = null;
   let cooldownInterval = null;
-
-  // 1. Initialize
   checkSession();
   checkConfigStatus();
-
-  // Mode Switching (Login vs Register)
   function setMode(mode) {
     currentMode = mode;
     hideAlert(emailAlert);
@@ -142,8 +119,6 @@ document.addEventListener('DOMContentLoaded', () => {
   btnToggleMode.addEventListener('click', () => {
     setMode(currentMode === 'login' ? 'register' : 'login');
   });
-
-  // Provider Tab Switching in Modal
   function setModalProvider(provider) {
     if (provider === 'gmail') {
       tabProviderGmail.classList.add('active');
@@ -368,8 +343,6 @@ document.addEventListener('DOMContentLoaded', () => {
       btnRegisterPasskey.disabled = false;
     }
   });
-
-  // 2. Handle Send OTP with Email Real Existence Check
   formSendOtp.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (e.submitter === btnPasskeyLogin) {
@@ -424,7 +397,6 @@ document.addEventListener('DOMContentLoaded', () => {
         startExpiryTimer(data.expires_in || 300);
         startCooldownTimer(data.cooldown || 45);
       } else {
-        // Hiển thị lỗi rõ ràng
         showAlert(emailAlert, data.message || 'Không thể gửi mã OTP.');
 
         if (data.already_exists) {
@@ -448,8 +420,6 @@ document.addEventListener('DOMContentLoaded', () => {
     switchStep('email');
     inputEmail.focus();
   });
-
-  // 3. Handle OTP inputs behavior
   otpInputs.forEach((input, index) => {
     input.addEventListener('input', (e) => {
       const val = e.target.value.replace(/[^0-9]/g, '');
@@ -507,8 +477,6 @@ document.addEventListener('DOMContentLoaded', () => {
       submitVerifyOtp();
     }
   }
-
-  // 4. Handle Verify OTP
   formVerifyOtp.addEventListener('submit', (e) => {
     e.preventDefault();
     submitVerifyOtp();
@@ -550,8 +518,6 @@ document.addEventListener('DOMContentLoaded', () => {
       setLoading(btnVerifyOtp, spinnerVerify, false);
     }
   }
-
-  // 5. Resend OTP Button
   btnResendOtp.addEventListener('click', async () => {
     if (btnResendOtp.disabled) return;
     hideAlert(otpAlert);
@@ -629,8 +595,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }, 1000);
   }
-
-  // 6. Dashboard & User Accounts List
   function showDashboard(user, title = 'Đăng nhập thành công!', subtitle = '') {
     hideAlert(passkeyRegistrationAlert);
     dashGreetingTitle.textContent = title;
@@ -712,8 +676,6 @@ document.addEventListener('DOMContentLoaded', () => {
     setMode('login');
     switchStep('email');
   });
-
-  // 7. Modal Handlers
   function openConfigModal() {
     hideAlert(modalAlertGmail);
     hideAlert(modalAlertMailtrap);
@@ -731,19 +693,17 @@ document.addEventListener('DOMContentLoaded', () => {
   modalConfig.addEventListener('click', (e) => {
     if (e.target === modalConfig) closeConfigModal();
   });
-
-  // Save Gmail Config
   formConfigGmail.addEventListener('submit', async (e) => {
     e.preventDefault();
     hideAlert(modalAlertGmail);
 
-    const payload = {
+    const sensitiveConfigPayload = {
       provider: 'gmail',
       gmail_user: cfgGmailUser.value.trim(),
-      gmail_password: cfgGmailPassword.value.trim()
+      gmail_password: sensitiveGmailPasswordInput.value.trim()
     };
 
-    if (!payload.gmail_user || !payload.gmail_password) {
+    if (!sensitiveConfigPayload.gmail_user || !sensitiveConfigPayload.gmail_password) {
       showAlert(modalAlertGmail, 'Vui lòng nhập Email Gmail và Mật khẩu ứng dụng 16 ký tự!');
       return;
     }
@@ -754,7 +714,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(sensitiveConfigPayload)
       });
 
       const data = await res.json();
@@ -771,21 +731,19 @@ document.addEventListener('DOMContentLoaded', () => {
       setLoading(btnSaveGmail, spinnerGmail, false);
     }
   });
-
-  // Save Mailtrap Config
   formConfigMailtrap.addEventListener('submit', async (e) => {
     e.preventDefault();
     hideAlert(modalAlertMailtrap);
 
-    const payload = {
+    const sensitiveConfigPayload = {
       provider: 'mailtrap',
       mailtrap_host: cfgMailtrapHost.value.trim(),
       mailtrap_port: cfgMailtrapPort.value.trim(),
       mailtrap_user: cfgMailtrapUser.value.trim(),
-      mailtrap_pass: cfgMailtrapPass.value.trim()
+      mailtrap_pass: sensitiveMailtrapPasswordInput.value.trim()
     };
 
-    if (!payload.mailtrap_user || !payload.mailtrap_pass) {
+    if (!sensitiveConfigPayload.mailtrap_user || !sensitiveConfigPayload.mailtrap_pass) {
       showAlert(modalAlertMailtrap, 'Vui lòng nhập Username và Password của Mailtrap!');
       return;
     }
@@ -796,7 +754,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(sensitiveConfigPayload)
       });
 
       const data = await res.json();

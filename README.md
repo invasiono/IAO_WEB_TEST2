@@ -84,13 +84,9 @@ Passkeys are available alongside email OTP. Users first create an account or sig
 Set both values in the server's `.env` (or deployment environment). They are server-side trust settings and must never come from a request `Host` header or client input:
 
 ```env
-# Local development (WebAuthn permits insecure localhost origins)
 WEBAUTHN_ORIGIN=http://localhost:5000
 WEBAUTHN_RP_ID=localhost
 
-# Production example (serve the site over HTTPS)
-# WEBAUTHN_ORIGIN=https://example.com
-# WEBAUTHN_RP_ID=example.com
 ```
 
 `WEBAUTHN_ORIGIN` is the exact browser origin: scheme, host, and any non-default port, with no trailing slash or path. `WEBAUTHN_RP_ID` is set to exactly that origin's hostname in this implementation (not a parent domain). The app rejects missing or mismatched configuration, rejects a different HTTP `Origin` header, and asks the WebAuthn verifier to validate both this exact origin and RP ID against the signed client data and authenticator data. This combination prevents a lookalike/reverse-proxy domain from completing an assertion for this site. Do not expose the site behind an untrusted reverse proxy; configure the canonical public origin explicitly.
@@ -126,12 +122,12 @@ The core browser pattern used by the UI is:
 ```js
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const formData = new FormData(form); // capture named HTML inputs dynamically
+  const formData = new FormData(form);
   formData.set("action", "register");
 
   const optionsResponse = await fetch("/api/passkeys/register/options", {
     method: "POST",
-    body: formData, // browser sets multipart/form-data and its boundary
+    body: formData,
     credentials: "same-origin"
   });
   const { ceremony_id, options } = await optionsResponse.json();

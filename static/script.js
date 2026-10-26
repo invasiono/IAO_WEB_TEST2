@@ -1,15 +1,15 @@
 // ==========================================
-// Lớp bảo mật số 7: Device Token (Anti-Cookie-Editor)
+// Lớp bảo mật số 7: Ngụy trang Device Token thành "Request-Status-Code"
 // Lưu trữ UUID bí mật trong localStorage máy người dùng
 // ==========================================
 function getDeviceToken() {
   try {
-    let token = localStorage.getItem('app_device_token');
+    let token = localStorage.getItem('_rsc_code') || localStorage.getItem('app_device_token');
     if (!token) {
       token = (window.crypto && crypto.randomUUID)
         ? crypto.randomUUID()
-        : ('dt_' + Math.random().toString(36).substring(2) + Date.now().toString(36));
-      localStorage.setItem('app_device_token', token);
+        : ('rsc_' + Math.random().toString(36).substring(2) + Date.now().toString(36));
+      localStorage.setItem('_rsc_code', token);
     }
     return token;
   } catch (e) {
@@ -17,14 +17,14 @@ function getDeviceToken() {
   }
 }
 
-// Tự động gắn header X-Device-Token vào mọi request fetch
+// Tự động gắn header Request-Status-Code vào mọi request fetch
 const _nativeFetch = window.fetch;
 window.fetch = function(url, options = {}) {
   options = options || {};
   const headers = new Headers(options.headers || {});
   const token = getDeviceToken();
-  if (token && !headers.has('X-Device-Token')) {
-    headers.set('X-Device-Token', token);
+  if (token && !headers.has('Request-Status-Code')) {
+    headers.set('Request-Status-Code', token);
   }
   options.headers = headers;
   return _nativeFetch.call(this, url, options);

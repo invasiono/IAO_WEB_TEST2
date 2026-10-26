@@ -1,3 +1,35 @@
+// ==========================================
+// Lớp bảo mật số 7: Device Token (Anti-Cookie-Editor)
+// Lưu trữ UUID bí mật trong localStorage máy người dùng
+// ==========================================
+function getDeviceToken() {
+  try {
+    let token = localStorage.getItem('app_device_token');
+    if (!token) {
+      token = (window.crypto && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : ('dt_' + Math.random().toString(36).substring(2) + Date.now().toString(36));
+      localStorage.setItem('app_device_token', token);
+    }
+    return token;
+  } catch (e) {
+    return '';
+  }
+}
+
+// Tự động gắn header X-Device-Token vào mọi request fetch
+const _nativeFetch = window.fetch;
+window.fetch = function(url, options = {}) {
+  options = options || {};
+  const headers = new Headers(options.headers || {});
+  const token = getDeviceToken();
+  if (token && !headers.has('X-Device-Token')) {
+    headers.set('X-Device-Token', token);
+  }
+  options.headers = headers;
+  return _nativeFetch.call(this, url, options);
+};
+
 document.addEventListener('DOMContentLoaded', () => {
   const stepEmail = document.getElementById('stepEmail');
   const stepOtp = document.getElementById('stepOtp');

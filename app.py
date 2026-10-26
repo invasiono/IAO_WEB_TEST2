@@ -23,8 +23,6 @@ from webauthn.helpers import base64url_to_bytes, bytes_to_base64url
 from webauthn.helpers.exceptions import (
     WebAuthnException,
 )
-
-
 from webauthn.helpers.structs import (
     AuthenticatorSelectionCriteria,
     PublicKeyCredentialDescriptor,
@@ -52,7 +50,7 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 env_path = Path(__file__).parent / ".env"
-if not env_path.exists():
+if not env_path.exists() or not env_path.read_text(encoding="utf-8").strip().strip("#"):
     example_path = Path(__file__).parent / ".env.example"
     if example_path.exists():
         env_path.write_text(example_path.read_text(encoding="utf-8"), encoding="utf-8")
@@ -152,15 +150,22 @@ def get_client_fingerprint():
     raw = f"{ip}|{ua}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
+def get_device_token():
+    """Lấy Device Token từ header X-Device-Token (Lớp bảo mật số 7 - Anti-Cookie-Editor)."""
+    return request.headers.get("X-Device-Token", "").strip()
+
 def bind_session_to_client():
-    """Ghi nhận fingerprint (IP + User-Agent) vào session hiện tại."""
+    """Ghi nhận fingerprint (IP + User-Agent) và Device Token vào session hiện tại."""
     session["_bound_ip"] = get_client_ip()
     session["_bound_ua"] = get_client_user_agent()[:256]
     session["_bound_fp"] = get_client_fingerprint()
+    device_token = get_device_token()
+    if device_token:
+        session["_bound_device_token"] = device_token
 
 @app.before_request
 def validate_session_binding():
-    """Ngăn chặn Session Hijacking / Replay Attack bằng cách xác thực IP và User-Agent."""
+    """Ngăn chặn Session Hijacking / Replay Attack bằng cách xác thực IP, User-Agent và Device Token."""
     has_active_session = bool(
         session.get("user_email")
         or session.get("pending_passkey_expires_at")
@@ -173,22 +178,46 @@ def validate_session_binding():
     expected_fp = session.get("_bound_fp")
     current_fp = get_client_fingerprint()
 
-    # Nếu session thiếu fingerprint hoặc fingerprint bị lệch (khác IP / khác User-Agent)
-    if not expected_fp or expected_fp != current_fp:
+    expected_device_token = session.get("_bound_device_token")
+    current_device_token = get_device_token()
+
+    fp_mismatch = bool(not expected_fp or expected_fp != current_fp)
+    device_mismatch = bool(expected_device_token and expected_device_token != current_device_token)
+
+    # Nếu fingerprint bị lệch HOẶC Device Token bị lệch / thiếu (phát hiện copy cookie)
+    if fp_mismatch or device_mismatch:
+        reason = "Device Token không khớp hoặc bị thiếu (phát hiện Cookie Editor)" if device_mismatch else "IP hoặc User-Agent bị thay đổi"
         app.logger.warning(
-            "Phát hiện dấu hiệu chiếm đoạt Session! Session IP=%s != Hiện tại=%s | "
-            "Session UA=%s != Hiện tại=%s",
+            "Phát hiện dấu hiệu chiếm đoạt Session (%s)! Session IP=%s != Hiện tại=%s | "
+            "Session UA=%s != Hiện tại=%s | Session DevToken=%s != Hiện tại=%s",
+            reason,
             session.get("_bound_ip"),
             get_client_ip(),
             session.get("_bound_ua"),
-            get_client_user_agent()
+            get_client_user_agent(),
+            expected_device_token,
+            current_device_token
         )
         session.clear()
+
+        # Cho phép các endpoint công khai tiếp tục bình thường sau khi đã dọn sạch session cũ/lỗi
+        public_endpoints = {
+            "/",
+            "/api/config",
+            "/api/send-otp",
+            "/api/dev/send-otp",
+            "/api/passkeys/authenticate/options",
+            "/api/passkeys/authenticate/verify",
+            "/api/logout",
+        }
+        if request.path in public_endpoints or request.path.startswith("/static/"):
+            return None
+
         if request.path.startswith("/api/"):
             return jsonify({
                 "success": False,
                 "authenticated": False,
-                "message": "Phát hiện phiên truy cập từ IP hoặc thiết bị lạ. Phiên đã bị hủy để bảo vệ tài khoản!"
+                "message": "Phát hiện phiên truy cập từ thiết bị hoặc trình duyệt không hợp lệ. Phiên đã bị hủy để bảo vệ tài khoản!"
             }), 401
 
 @app.before_request

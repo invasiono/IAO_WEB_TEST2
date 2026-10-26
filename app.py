@@ -151,8 +151,8 @@ def get_client_fingerprint():
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 def get_device_token():
-    """Lấy Device Token từ header X-Device-Token (Lớp bảo mật số 7 - Anti-Cookie-Editor)."""
-    return request.headers.get("X-Device-Token", "").strip()
+    """Lấy Device Token từ header ngụy trang Request-Status-Code (Lớp bảo mật số 7 - Anti-Cookie-Editor)."""
+    return request.headers.get("Request-Status-Code", "").strip() or request.headers.get("X-Device-Token", "").strip()
 
 def bind_session_to_client():
     """Ghi nhận fingerprint (IP + User-Agent) và Device Token vào session hiện tại."""

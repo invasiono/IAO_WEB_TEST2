@@ -5,6 +5,7 @@ import secrets
 import re
 import json
 import sqlite3
+import hashlib
 from urllib.parse import urlparse
 from datetime import datetime
 from pathlib import Path
@@ -22,6 +23,8 @@ from webauthn.helpers import base64url_to_bytes, bytes_to_base64url
 from webauthn.helpers.exceptions import (
     WebAuthnException,
 )
+
+
 from webauthn.helpers.structs import (
     AuthenticatorSelectionCriteria,
     PublicKeyCredentialDescriptor,
@@ -76,6 +79,12 @@ app.config.update(
     SESSION_COOKIE_SECURE=os.getenv("WEBAUTHN_ORIGIN", "").strip().lower().startswith("https://"),
 )
 
+try:
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+except ImportError:
+    pass
+
 otp_storage = {}
 
 OTP_EXPIRY_SECONDS = 300
@@ -121,6 +130,66 @@ def passkey_origin_allowed(origin):
     if origin != expected_origin:
         return None, "Request Origin does not match the configured WebAuthn origin.", 403
     return (rp_id, expected_origin), None, None
+
+def get_client_ip():
+    """Lấy địa chỉ IP thật của client, hỗ trợ chạy qua Proxy/Render/Cloudflare."""
+    cf_ip = request.headers.get("CF-Connecting-IP")
+    if cf_ip:
+        return cf_ip.strip()
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.remote_addr or "127.0.0.1"
+
+def get_client_user_agent():
+    """Lấy User-Agent của client."""
+    return request.headers.get("User-Agent", "").strip()
+
+def get_client_fingerprint():
+    """Tạo mã băm kết hợp IP và User-Agent để ràng buộc danh tính Session."""
+    ip = get_client_ip()
+    ua = get_client_user_agent()
+    raw = f"{ip}|{ua}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+def bind_session_to_client():
+    """Ghi nhận fingerprint (IP + User-Agent) vào session hiện tại."""
+    session["_bound_ip"] = get_client_ip()
+    session["_bound_ua"] = get_client_user_agent()[:256]
+    session["_bound_fp"] = get_client_fingerprint()
+
+@app.before_request
+def validate_session_binding():
+    """Ngăn chặn Session Hijacking / Replay Attack bằng cách xác thực IP và User-Agent."""
+    has_active_session = bool(
+        session.get("user_email")
+        or session.get("pending_passkey_expires_at")
+        or session.get("pending_passkey_email")
+        or session.get("pending_passkey_user_id")
+    )
+    if not has_active_session:
+        return None
+
+    expected_fp = session.get("_bound_fp")
+    current_fp = get_client_fingerprint()
+
+    # Nếu session thiếu fingerprint hoặc fingerprint bị lệch (khác IP / khác User-Agent)
+    if not expected_fp or expected_fp != current_fp:
+        app.logger.warning(
+            "Phát hiện dấu hiệu chiếm đoạt Session! Session IP=%s != Hiện tại=%s | "
+            "Session UA=%s != Hiện tại=%s",
+            session.get("_bound_ip"),
+            get_client_ip(),
+            session.get("_bound_ua"),
+            get_client_user_agent()
+        )
+        session.clear()
+        if request.path.startswith("/api/"):
+            return jsonify({
+                "success": False,
+                "authenticated": False,
+                "message": "Phát hiện phiên truy cập từ IP hoặc thiết bị lạ. Phiên đã bị hủy để bảo vệ tài khoản!"
+            }), 401
 
 @app.before_request
 def enforce_api_origin():
@@ -444,6 +513,7 @@ def verify_otp():
         session["user_fullname"] = user["fullname"]
         session["logged_in_at"] = user["last_login"]
         session["created_at"] = user["created_at"]
+        bind_session_to_client()
         return jsonify({
             "success": True,
             "authenticated": True,
@@ -462,6 +532,7 @@ def verify_otp():
         session["pending_passkey_user_handle"] = secrets.token_urlsafe(32)
     else:
         session["pending_passkey_user_id"] = user["id"]
+    bind_session_to_client()
 
     return jsonify({
         "success": True,
@@ -508,7 +579,9 @@ def get_current_user():
 
     return jsonify({
         "authenticated": True,
-        "user": user
+        "user": user,
+        "client_ip": session.get("_bound_ip"),
+        "client_ua": session.get("_bound_ua"),
     })
 
 @app.route("/api/users", methods=["GET"])
@@ -702,6 +775,7 @@ def verify_passkey_registration():
         session["user_fullname"] = user["fullname"]
         session["logged_in_at"] = user["last_login"]
         session["created_at"] = user["created_at"]
+        bind_session_to_client()
 
     return jsonify({
         "success": True,
@@ -795,6 +869,7 @@ def verify_passkey_authentication():
     session["user_fullname"] = user["fullname"]
     session["logged_in_at"] = user["last_login"]
     session["created_at"] = user["created_at"]
+    bind_session_to_client()
     return jsonify({"success": True, "user": user})
 
 if __name__ == "__main__":

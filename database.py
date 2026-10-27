@@ -1,15 +1,25 @@
 import sqlite3
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 DB_PATH = Path(__file__).parent / "users.db"
 
-def get_connection():
+
+def _now_str() -> str:
+    return datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+
+
+def _normalize_email(email: str) -> str:
+    return email.strip().lower()
+
+
+def get_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
+
 
 def init_db():
     with get_connection() as conn:
@@ -34,6 +44,7 @@ def init_db():
                 last_used_at TEXT
             )
         """)
+
         credential_columns = {
             row["name"] for row in conn.execute("PRAGMA table_info(webauthn_credentials)")
         }
@@ -41,6 +52,7 @@ def init_db():
             conn.execute(
                 "ALTER TABLE webauthn_credentials ADD COLUMN device_name TEXT NOT NULL DEFAULT 'Passkey'"
             )
+
         conn.execute("""
             CREATE TABLE IF NOT EXISTS webauthn_challenges (
                 ceremony_id TEXT PRIMARY KEY,
@@ -53,85 +65,103 @@ def init_db():
         """)
         conn.commit()
 
+
 def get_user_by_email(email: str):
-    email = email.strip().lower()
     with get_connection() as conn:
-        cursor = conn.execute("SELECT * FROM users WHERE email = ?", (email,))
-        row = cursor.fetchone()
-        if row:
-            return dict(row)
-        return None
+        row = conn.execute(
+            "SELECT * FROM users WHERE email = ?",
+            (_normalize_email(email),)
+        ).fetchone()
+        return dict(row) if row else None
+
 
 def get_user_by_id(user_id: int):
     with get_connection() as conn:
-        row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        row = conn.execute(
+            "SELECT * FROM users WHERE id = ?",
+            (user_id,)
+        ).fetchone()
         return dict(row) if row else None
 
+
 def create_user(email: str, fullname: str):
-    email = email.strip().lower()
-    fullname = fullname.strip()
-    now_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    normalized_email = _normalize_email(email)
+    name = fullname.strip()
+    now = _now_str()
 
     with get_connection() as conn:
         try:
             cursor = conn.execute(
                 "INSERT INTO users (fullname, email, created_at, last_login) VALUES (?, ?, ?, ?)",
-                (fullname, email, now_str, now_str)
+                (name, normalized_email, now, now)
             )
             conn.commit()
             return {
                 "id": cursor.lastrowid,
-                "fullname": fullname,
-                "email": email,
-                "created_at": now_str,
-                "last_login": now_str
+                "fullname": name,
+                "email": normalized_email,
+                "created_at": now,
+                "last_login": now
             }
         except sqlite3.IntegrityError:
             return None
 
-def create_user_with_credential(email: str, fullname: str, credential_id: str,
-                                public_key: bytes, sign_count: int,
-                                transports: str, device_name: str):
-    email = email.strip().lower()
-    fullname = fullname.strip()
-    now_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+
+def create_user_with_credential(
+    email: str,
+    fullname: str,
+    credential_id: str,
+    public_key: bytes,
+    sign_count: int,
+    transports: str,
+    device_name: str
+):
+    normalized_email = _normalize_email(email)
+    name = fullname.strip()
+    now = _now_str()
 
     with get_connection() as conn:
         try:
             cursor = conn.execute(
                 "INSERT INTO users (fullname, email, created_at, last_login) VALUES (?, ?, ?, ?)",
-                (fullname, email, now_str, now_str)
+                (name, normalized_email, now, now)
             )
             user_id = cursor.lastrowid
             conn.execute(
                 """INSERT INTO webauthn_credentials
                    (credential_id, user_id, public_key, sign_count, transports, device_name, created_at)
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (credential_id, user_id, public_key, sign_count, transports, device_name, now_str)
+                (credential_id, user_id, public_key, sign_count, transports, device_name, now)
             )
             conn.commit()
             return {
                 "id": user_id,
-                "fullname": fullname,
-                "email": email,
-                "created_at": now_str,
-                "last_login": now_str
+                "fullname": name,
+                "email": normalized_email,
+                "created_at": now,
+                "last_login": now
             }
         except sqlite3.IntegrityError:
             conn.rollback()
             return None
 
+
 def update_last_login(email: str):
-    email = email.strip().lower()
-    now_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     with get_connection() as conn:
-        conn.execute("UPDATE users SET last_login = ? WHERE email = ?", (now_str, email))
+        conn.execute(
+            "UPDATE users SET last_login = ? WHERE email = ?",
+            (_now_str(), _normalize_email(email))
+        )
         conn.commit()
+
 
 def get_all_users():
     with get_connection() as conn:
-        cursor = conn.execute("SELECT id, fullname, email, created_at, last_login FROM users ORDER BY id DESC")
+        cursor = conn.execute(
+            "SELECT id, fullname, email, created_at, last_login FROM users ORDER BY id DESC"
+        )
         return [dict(row) for row in cursor.fetchall()]
+
 
 def get_credentials_for_user(user_id: int):
     with get_connection() as conn:
@@ -140,6 +170,7 @@ def get_credentials_for_user(user_id: int):
             (user_id,)
         ).fetchall()
         return [dict(row) for row in rows]
+
 
 def get_credential(credential_id: str):
     with get_connection() as conn:
@@ -150,20 +181,32 @@ def get_credential(credential_id: str):
         ).fetchone()
         return dict(row) if row else None
 
-def save_credential(credential_id: str, user_id: int, public_key: bytes, sign_count: int,
-                    transports: str, device_name: str):
+
+def save_credential(
+    credential_id: str,
+    user_id: int,
+    public_key: bytes,
+    sign_count: int,
+    transports: str,
+    device_name: str
+):
     with get_connection() as conn:
         conn.execute(
             """INSERT INTO webauthn_credentials
                (credential_id, user_id, public_key, sign_count, transports, device_name, created_at)
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (credential_id, user_id, public_key, sign_count, transports, device_name,
-             datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
+            (credential_id, user_id, public_key, sign_count, transports, device_name, _now_str())
         )
         conn.commit()
 
-def create_webauthn_challenge(ceremony_id: str, ceremony: str, challenge: str,
-                              user_id: Optional[int], expires_at: int):
+
+def create_webauthn_challenge(
+    ceremony_id: str,
+    ceremony: str,
+    challenge: str,
+    user_id: Optional[int],
+    expires_at: int
+):
     with get_connection() as conn:
         conn.execute(
             "DELETE FROM webauthn_challenges WHERE expires_at <= ? OR consumed = 1",
@@ -176,6 +219,7 @@ def create_webauthn_challenge(ceremony_id: str, ceremony: str, challenge: str,
             (ceremony_id, ceremony, challenge, user_id, expires_at)
         )
         conn.commit()
+
 
 def consume_webauthn_challenge(ceremony_id: str, ceremony: str):
     with get_connection() as conn:
@@ -195,14 +239,16 @@ def consume_webauthn_challenge(ceremony_id: str, ceremony: str):
         conn.commit()
         return dict(row)
 
+
 def update_credential_sign_count(credential_id: str, sign_count: int):
     with get_connection() as conn:
         conn.execute(
             """UPDATE webauthn_credentials
                SET sign_count = ?, last_used_at = ?
                WHERE credential_id = ?""",
-            (sign_count, datetime.now().strftime("%d/%m/%Y %H:%M:%S"), credential_id)
+            (sign_count, _now_str(), credential_id)
         )
         conn.commit()
+
 
 init_db()

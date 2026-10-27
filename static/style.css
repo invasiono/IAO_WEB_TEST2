@@ -45,6 +45,7 @@ body {
   pointer-events: none;
   opacity: 0.45;
 }
+
 .shape-1 {
   width: 500px;
   height: 500px;
@@ -52,6 +53,7 @@ body {
   top: -150px;
   left: -150px;
 }
+
 .shape-2 {
   width: 450px;
   height: 450px;
@@ -59,6 +61,7 @@ body {
   bottom: -100px;
   right: -100px;
 }
+
 .shape-3 {
   width: 350px;
   height: 350px;
@@ -275,8 +278,15 @@ body {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 
@@ -649,7 +659,9 @@ body {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 
@@ -1019,9 +1031,21 @@ body {
 
 
 @keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  20%, 60% { transform: translateX(-6px); }
-  40%, 80% { transform: translateX(6px); }
+
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  20%,
+  60% {
+    transform: translateX(-6px);
+  }
+
+  40%,
+  80% {
+    transform: translateX(6px);
+  }
 }
 
 .shake {
@@ -1034,17 +1058,21 @@ body {
   .top-nav {
     padding: 14px 18px;
   }
+
   .app-version {
     font-size: 10px;
   }
+
   .auth-card {
     padding: 24px 18px;
   }
+
   .otp-digit {
     width: 44px;
     height: 52px;
     font-size: 22px;
   }
+
   .btn-text-icon span {
     display: none;
   }

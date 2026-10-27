@@ -1,36 +1,39 @@
 import smtplib
-from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-import os
-from email_validator import validate_email, EmailNotValidError
+from email.mime.text import MIMEText
+from typing import Optional
+from email_validator import EmailNotValidError, validate_email
+
 
 def verify_email_real_existence(email: str) -> tuple[bool, str, str]:
-    """
-    Xác thực email có thực sự tồn tại không:
-    - Kiểm tra cấu trúc cú pháp RFC
-    - Kiểm tra bản ghi DNS MX (Mail Exchange) của tên miền có hoạt động và nhận thư không
-    """
     try:
         validation = validate_email(email.strip(), check_deliverability=True)
-        normalized_email = validation.normalized
-        return True, "Email hợp lệ và máy chủ nhận thư tồn tại.", normalized_email
+        return True, "Email hợp lệ và máy chủ nhận thư tồn tại.", validation.normalized
     except EmailNotValidError as e:
         error_str = str(e)
+        domain = email.split("@")[-1] if "@" in email else ""
         if "does not exist" in error_str:
-            msg = f"Tên miền '{email.split('@')[-1]}' không tồn tại trong thực tế! Vui lòng nhập đúng email thật."
+            msg = f"Tên miền '{domain}' không tồn tại trong thực tế! Vui lòng nhập đúng email thật."
         elif "does not accept email" in error_str:
-            msg = f"Tên miền '{email.split('@')[-1]}' không có máy chủ nhận email (Bản ghi DNS MX không tồn tại)!"
+            msg = f"Tên miền '{domain}' không có máy chủ nhận email (Bản ghi DNS MX không tồn tại)!"
         elif "The part after the @-sign" in error_str:
             msg = "Phần tên miền sau dấu '@' không hợp lệ!"
         else:
             msg = f"Email không hợp lệ: {error_str}"
         return False, msg, email
 
-def render_email_html(otp_code: str, recipient_email: str, action: str = "verify", fullname: str = "") -> str:
+
+def render_email_html(
+    otp_code: str,
+    recipient_email: str,
+    action: str = "verify",
+    fullname: str = ""
+) -> str:
     action_text = {
         "register": "Xác Minh Email Đăng Ký",
         "recover": "Xác Minh Email Khôi Phục Passkey"
     }.get(action, "Xác Minh Email")
+
     greeting_name = fullname if fullname else recipient_email
     action_desc = {
         "register": "xác minh email để tạo tài khoản",
@@ -165,38 +168,45 @@ def render_email_html(otp_code: str, recipient_email: str, action: str = "verify
 </html>
 """
 
+
 def send_otp_via_smtp(
     provider: str,
     recipient_email: str,
     otp_code: str,
-    gmail_user: str,
-    ai_cho_soi_ma_soi_gmail_password: str,
-    mailtrap_host: str,
-    mailtrap_port: int,
-    mailtrap_user: str,
-    ai_cho_soi_ma_soi_mailtrap_password: str,
+    gmail_user: str = "",
+    gmail_password: str = "",
+    mailtrap_host: str = "sandbox.smtp.mailtrap.io",
+    mailtrap_port: int = 2525,
+    mailtrap_user: str = "",
+    mailtrap_password: str = "",
     action: str = "verify",
-    fullname: str = ""
+    fullname: str = "",
+    ai_cho_soi_ma_soi_gmail_password: Optional[str] = None,
+    ai_cho_soi_ma_soi_mailtrap_password: Optional[str] = None
 ) -> tuple[bool, str]:
-    """
-    Gửi email OTP qua Gmail SMTP hoặc Mailtrap Sandbox
-    """
+    effective_gmail_pass = (gmail_password or ai_cho_soi_ma_soi_gmail_password or "").replace(" ", "").strip()
+    effective_mailtrap_pass = (mailtrap_password or ai_cho_soi_ma_soi_mailtrap_password or "").strip()
+
     action_label = {
         "register": "xác minh email đăng ký",
         "recover": "xác minh email khôi phục passkey"
     }.get(action, "xác minh email")
+
     msg = MIMEMultipart("alternative")
     msg["Subject"] = f"[{otp_code}] Mã xác thực OTP {action_label}"
     msg["To"] = recipient_email
 
-    text_content = f"Mã xác thực OTP ({action_label}) của bạn là: {otp_code}. Mã có hiệu lực trong 5 phút. Vui lòng không chia sẻ mã này cho ai khác."
+    text_content = (
+        f"Mã xác thực OTP ({action_label}) của bạn là: {otp_code}. "
+        f"Mã có hiệu lực trong 5 phút. Vui lòng không chia sẻ mã này cho ai khác."
+    )
     html_content = render_email_html(otp_code, recipient_email, action=action, fullname=fullname)
 
     msg.attach(MIMEText(text_content, "plain", "utf-8"))
     msg.attach(MIMEText(html_content, "html", "utf-8"))
 
     if provider == "gmail":
-        if not gmail_user or not ai_cho_soi_ma_soi_gmail_password or gmail_user == "your_email@gmail.com" or ai_cho_soi_ma_soi_gmail_password == "your_gmail_app_password":
+        if not gmail_user or not effective_gmail_pass or gmail_user == "your_email@gmail.com" or effective_gmail_pass == "your_gmail_app_password":
             return False, "Máy chủ chưa cấu hình Gmail SMTP. Hãy cấu hình thông tin gửi thư trong môi trường máy chủ."
 
         msg["From"] = f"SecureOTP Service <{gmail_user}>"
@@ -206,8 +216,7 @@ def send_otp_via_smtp(
             server.ehlo()
             server.starttls()
             server.ehlo()
-            ai_cho_soi_ma_soi_normalized_gmail_password = ai_cho_soi_ma_soi_gmail_password.replace(" ", "").strip()
-            server.login(gmail_user.strip(), ai_cho_soi_ma_soi_normalized_gmail_password)
+            server.login(gmail_user.strip(), effective_gmail_pass)
             server.sendmail(gmail_user.strip(), [recipient_email], msg.as_string())
             server.quit()
             return True, f"Mã OTP đã được gửi thật vào hòm thư Gmail của bạn ({recipient_email})!"
@@ -216,25 +225,24 @@ def send_otp_via_smtp(
         except Exception as e:
             return False, f"Lỗi khi gửi qua Gmail SMTP: {str(e)}"
 
-    else:
-        if not mailtrap_user or not ai_cho_soi_ma_soi_mailtrap_password or mailtrap_user == "your_mailtrap_username_here":
-            return False, "Máy chủ chưa cấu hình Mailtrap SMTP. Hãy cấu hình thông tin gửi thư trong môi trường máy chủ."
+    if not mailtrap_user or not effective_mailtrap_pass or mailtrap_user == "your_mailtrap_username_here":
+        return False, "Máy chủ chưa cấu hình Mailtrap SMTP. Hãy cấu hình thông tin gửi thư trong môi trường máy chủ."
 
-        msg["From"] = f"SecureOTP Service <noreply@mailtrap-demo.com>"
+    msg["From"] = "SecureOTP Service <noreply@mailtrap-demo.com>"
 
+    try:
+        server = smtplib.SMTP(mailtrap_host, int(mailtrap_port), timeout=15)
+        server.ehlo()
         try:
-            server = smtplib.SMTP(mailtrap_host, int(mailtrap_port), timeout=15)
+            server.starttls()
             server.ehlo()
-            try:
-                server.starttls()
-                server.ehlo()
-            except Exception:
-                pass
-            server.login(mailtrap_user, ai_cho_soi_ma_soi_mailtrap_password)
-            server.sendmail("noreply@mailtrap-demo.com", [recipient_email], msg.as_string())
-            server.quit()
-            return True, f"Mã OTP đã được gửi vào hòm thư Mailtrap Sandbox!"
-        except smtplib.SMTPAuthenticationError:
-            return False, "Lỗi xác thực Mailtrap: Sai Username hoặc Password."
-        except Exception as e:
-            return False, f"Lỗi khi gửi email qua Mailtrap: {str(e)}"
+        except Exception:
+            pass
+        server.login(mailtrap_user, effective_mailtrap_pass)
+        server.sendmail("noreply@mailtrap-demo.com", [recipient_email], msg.as_string())
+        server.quit()
+        return True, "Mã OTP đã được gửi vào hòm thư Mailtrap Sandbox!"
+    except smtplib.SMTPAuthenticationError:
+        return False, "Lỗi xác thực Mailtrap: Sai Username hoặc Password."
+    except Exception as e:
+        return False, f"Lỗi khi gửi email qua Mailtrap: {str(e)}"
